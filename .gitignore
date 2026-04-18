@@ -1,0 +1,38 @@
+# === Compilation Artifacts ===
+# Loại bỏ các file object và file thực thi sinh ra từ Makefile
+*.o
+os
+
+# === macOS Specific ===
+# Loại bỏ các file rác của hệ thống macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# === LaTeX Artifacts ===
+# Dành cho phần làm báo cáo trong thư mục report/
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+# Lưu ý: Nếu bạn muốn giữ lại file PDF báo cáo cuối cùng trên Git, 
+# hãy bỏ dấu thăng ở dòng dưới hoặc di chuyển PDF ra chỗ khác.
+# *.pdf
+
+# === Editor & IDEs ===
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# === Others ===
+# Loại bỏ các file nén tạm thời
+*.zip
+*.tar.gz
