@@ -1,7 +1,10 @@
 # === Compilation Artifacts ===
-# Loại bỏ các file object và file thực thi sinh ra từ Makefile
+# Loại bỏ các file object, thư mục build và file thực thi sinh ra từ Makefile
 *.o
+obj/
 os
+# Bỏ qua file list tự sinh của syscall
+*.lst
 
 # === macOS Specific ===
 # Loại bỏ các file rác của hệ thống macOS
