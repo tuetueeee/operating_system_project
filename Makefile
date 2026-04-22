@@ -33,7 +33,7 @@ mem: $(MEM_OBJ)
 
 # Just compile scheduler
 sched: $(SCHED_OBJ)
-	$(MAKE) $(LFLAGS) $(MEM_OBJ) -o sched $(LIB)
+	$(MAKE) $(LFLAGS) $(SCHED_OBJ) -o sched $(LIB)
 
 # Compile syscall
 syscalltbl.lst: $(SRC)/syscall.tbl
