@@ -23,6 +23,9 @@ void put_proc(struct pcb_t * proc);
 /* Add a new process to ready queue */
 void add_proc(struct pcb_t * proc);
 
+/* Remove a finished process from scheduler bookkeeping */
+void remove_proc(struct pcb_t * proc);
+
 #endif
 
 

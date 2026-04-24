@@ -22,6 +22,33 @@ static struct queue_t running_list;
 #ifdef MLQ_SCHED
 static struct queue_t mlq_ready_queue[MAX_PRIO];
 static int slot[MAX_PRIO];
+static int current_mlq_prio;
+#endif
+
+static void remove_from_running_list(struct pcb_t * proc) {
+	if (proc == NULL)
+		return;
+
+	purgequeue(&running_list, proc);
+}
+
+#ifdef MLQ_SCHED
+static void reset_mlq_slot(void) {
+	int prio;
+
+	for (prio = 0; prio < MAX_PRIO; prio++)
+		slot[prio] = MAX_PRIO - prio;
+}
+
+static int normalize_prio(unsigned int prio) {
+	if (prio >= MAX_PRIO) {
+		fprintf(stderr, "sched: priority %u out of range, clamped to %d\n",
+			prio, MAX_PRIO - 1);
+		return MAX_PRIO - 1;
+	}
+
+	return (int)prio;
+}
 #endif
 
 int queue_empty(void) {
@@ -42,6 +69,7 @@ void init_scheduler(void) {
 		mlq_ready_queue[i].size = 0;
 		slot[i] = MAX_PRIO - i; 
 	}
+	current_mlq_prio = 0;
 #endif
 	ready_queue.size = 0;
 	run_queue.size = 0;
@@ -57,45 +85,89 @@ void init_scheduler(void) {
  *  State representation   prio = 0 .. MAX_PRIO, curr_slot = 0..(MAX_PRIO - prio)
  */
 struct pcb_t * get_mlq_proc(void) {
-    struct pcb_t * proc = NULL;
+	struct pcb_t * proc = NULL;
+	int scanned;
 
-    pthread_mutex_lock(&queue_lock);
-    for (int prio = 0; prio < MAX_PRIO; prio++) {
-        if (!empty(&mlq_ready_queue[prio])) {
-            proc = dequeue(&mlq_ready_queue[prio]);
-            break;
-        }
-    }
-    pthread_mutex_unlock(&queue_lock);
+	pthread_mutex_lock(&queue_lock);
 
-    return proc;	
+	if (queue_empty()) {
+		pthread_mutex_unlock(&queue_lock);
+		return NULL;
+	}
+
+	for (scanned = 0; scanned < MAX_PRIO; scanned++) {
+		int prio = (current_mlq_prio + scanned) % MAX_PRIO;
+
+		if (slot[prio] <= 0 || empty(&mlq_ready_queue[prio]))
+			continue;
+
+		proc = dequeue(&mlq_ready_queue[prio]);
+		slot[prio]--;
+		current_mlq_prio = prio;
+
+		if (slot[prio] == 0 || empty(&mlq_ready_queue[prio]))
+			current_mlq_prio = (prio + 1) % MAX_PRIO;
+
+		break;
+	}
+
+	if (proc == NULL) {
+		reset_mlq_slot();
+		for (scanned = 0; scanned < MAX_PRIO; scanned++) {
+			int prio = (current_mlq_prio + scanned) % MAX_PRIO;
+
+			if (empty(&mlq_ready_queue[prio]))
+				continue;
+
+			proc = dequeue(&mlq_ready_queue[prio]);
+			slot[prio]--;
+			current_mlq_prio = prio;
+
+			if (slot[prio] == 0 || empty(&mlq_ready_queue[prio]))
+				current_mlq_prio = (prio + 1) % MAX_PRIO;
+
+			break;
+		}
+	}
+
+	pthread_mutex_unlock(&queue_lock);
+
+	return proc;
 }
 
 void put_mlq_proc(struct pcb_t * proc) {
-    if (proc == NULL)
-        return;
+	int prio;
 
-    proc->krnl->ready_queue = &ready_queue;
-    proc->krnl->mlq_ready_queue = mlq_ready_queue;
-    proc->krnl->running_list = &running_list;
+	if (proc == NULL)
+		return;
 
-    pthread_mutex_lock(&queue_lock);
-    enqueue(&mlq_ready_queue[proc->prio], proc);
-    pthread_mutex_unlock(&queue_lock);
+	proc->krnl->ready_queue = &ready_queue;
+	proc->krnl->mlq_ready_queue = mlq_ready_queue;
+	proc->krnl->running_list = &running_list;
+	prio = normalize_prio(proc->prio);
+	proc->prio = prio;
+
+	pthread_mutex_lock(&queue_lock);
+	enqueue(&mlq_ready_queue[prio], proc);
+	pthread_mutex_unlock(&queue_lock);
 }
 
 void add_mlq_proc(struct pcb_t * proc) {
-    if (proc == NULL)
-        return;
+	int prio;
 
-    proc->krnl->ready_queue = &ready_queue;
-    proc->krnl->mlq_ready_queue = mlq_ready_queue;
-    proc->krnl->running_list = &running_list;
+	if (proc == NULL)
+		return;
 
-    pthread_mutex_lock(&queue_lock);
-    enqueue(&mlq_ready_queue[proc->prio], proc);
-    enqueue(&running_list, proc);
-    pthread_mutex_unlock(&queue_lock);	
+	proc->krnl->ready_queue = &ready_queue;
+	proc->krnl->mlq_ready_queue = mlq_ready_queue;
+	proc->krnl->running_list = &running_list;
+	prio = normalize_prio(proc->prio);
+	proc->prio = prio;
+
+	pthread_mutex_lock(&queue_lock);
+	enqueue(&mlq_ready_queue[prio], proc);
+	enqueue(&running_list, proc);
+	pthread_mutex_unlock(&queue_lock);	
 }
 
 struct pcb_t * get_proc(void) {
@@ -146,10 +218,16 @@ void add_proc(struct pcb_t * proc) {
 	enqueue(&running_list, proc);
 	pthread_mutex_unlock(&queue_lock);	
 }
+#endif
+
+void remove_proc(struct pcb_t * proc) {
+	pthread_mutex_lock(&queue_lock);
+	remove_from_running_list(proc);
+	pthread_mutex_unlock(&queue_lock);
+}
 
 void finish_scheduler(void) {
-    pthread_mutex_destroy(&queue_lock);
+	pthread_mutex_destroy(&queue_lock);
 }
-#endif
 
 

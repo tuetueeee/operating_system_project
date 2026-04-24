@@ -68,6 +68,7 @@ static void * cpu_routine(void * args) {
 			/* The porcess has finish it job */
 			printf("\tCPU %d: Processed %2d has finished\n",
 				id ,proc->pid);
+			remove_proc(proc);
 			free(proc);
 			proc = get_proc();
 			time_left = 0;
