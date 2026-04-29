@@ -173,6 +173,26 @@ int MEMPHY_dump(struct memphy_struct *mp)
   /*TODO dump memphy contnt mp->storage
    *     for tracing the memory content
    */
+   if (mp == NULL || mp->storage == NULL) {
+        return -1;
+    }
+
+   printf("\n--- Physical Memory Dump (Size: %ld) ---\n", (long)mp->maxsz);
+    
+   int has_data = 0;
+   for (addr_t addr = 0; addr < mp->maxsz; addr++) {
+        /* Chỉ in các ô nhớ có giá trị khác 0 để dễ theo dõi */
+        if (mp->storage[addr] != 0) {
+            printf("[0x%08x]: 0x%02x\n", addr, mp->storage[addr]);
+            has_data = 1;
+        }
+    }
+
+   if (!has_data) {
+      printf("(Physical memory is currently empty/all zeros)\n");
+    }
+    
+   printf("--- End of Dump ---\n\n");
    return 0;
 }
 
