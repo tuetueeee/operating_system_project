@@ -1,0 +1,130 @@
+Time slot   0
+ld_routine
+	Loaded a process at input/proc/p0s, PID: 1 PRIO: 0
+	CPU 1: Dispatched process  1
+Time slot   1
+	Loaded a process at input/proc/p1s, PID: 2 PRIO: 15
+Time slot   2
+	CPU 0: Dispatched process  2
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000000
+Page 1 -> PTE Value: 80000001
+	Loaded a process at input/proc/p1s, PID: 3 PRIO: 0
+Time slot   3
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000002
+Page 1 -> PTE Value: 80000003
+Time slot   4
+Time slot   5
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000002
+Page 1 -> PTE Value: 80000003
+Page 2 -> PTE Value: 80000004
+	Loaded a process at input/proc/p0s, PID: 4 PRIO: 0
+Time slot   6
+	CPU 1: Put process  1 to run queue
+	CPU 1: Dispatched process  3
+Time slot   7
+Time slot   8
+	CPU 0: Put process  2 to run queue
+	CPU 0: Dispatched process  4
+Time slot   9
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000005
+Page 1 -> PTE Value: 80000006
+Time slot  10
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000005
+Page 1 -> PTE Value: 80000006
+Page 2 -> PTE Value: 80000007
+Page 3 -> PTE Value: 80000008
+Time slot  11
+libfree:205
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000005
+Page 1 -> PTE Value: 80000006
+Page 2 -> PTE Value: 80000007
+Page 3 -> PTE Value: 80000008
+Time slot  12
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000005
+Page 1 -> PTE Value: 80000006
+Page 2 -> PTE Value: 80000007
+Page 3 -> PTE Value: 80000008
+	CPU 1: Put process  3 to run queue
+	CPU 1: Dispatched process  1
+libread:365
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000005
+Page 1 -> PTE Value: 80000006
+Page 2 -> PTE Value: 80000007
+Page 3 -> PTE Value: 80000008
+Time slot  13
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000005
+Page 1 -> PTE Value: 80000006
+Page 2 -> PTE Value: 80000007
+Page 3 -> PTE Value: 80000008
+Time slot  14
+	CPU 0: Put process  4 to run queue
+	CPU 0: Dispatched process  3
+libread:365
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000005
+Page 1 -> PTE Value: 80000006
+Page 2 -> PTE Value: 80000007
+Page 3 -> PTE Value: 80000008
+Time slot  15
+Time slot  16
+libread:365
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000005
+Page 1 -> PTE Value: 80000006
+Page 2 -> PTE Value: 80000007
+Page 3 -> PTE Value: 80000008
+Time slot  17
+Time slot  18
+	CPU 0: Processed  3 has finished
+	CPU 0: Dispatched process  4
+libread:365
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000005
+Page 1 -> PTE Value: 80000006
+Page 2 -> PTE Value: 80000007
+Page 3 -> PTE Value: 80000008
+	CPU 1: Put process  1 to run queue
+	CPU 1: Dispatched process  2
+Time slot  19
+Time slot  20
+libread:365
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000005
+Page 1 -> PTE Value: 80000006
+Page 2 -> PTE Value: 80000007
+Page 3 -> PTE Value: 80000008
+Time slot  21
+Time slot  22
+libread:365
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000005
+Page 1 -> PTE Value: 80000006
+Page 2 -> PTE Value: 80000007
+Page 3 -> PTE Value: 80000008
+	CPU 1: Processed  2 has finished
+	CPU 1: Dispatched process  1
+libfree:205
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000005
+Page 1 -> PTE Value: 80000006
+Page 2 -> PTE Value: 80000007
+Page 3 -> PTE Value: 80000008
+Time slot  23
+Time slot  24
+	CPU 0: Put process  4 to run queue
+	CPU 0: Dispatched process  4
+	CPU 1: Processed  1 has finished
+	CPU 1 stopped
+Time slot  25
+Time slot  26
+	CPU 0: Processed  4 has finished
+	CPU 0 stopped

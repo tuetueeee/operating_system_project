@@ -1,0 +1,24 @@
+Time slot   0
+ld_routine
+	Loaded a process at input/proc/sc2, PID: 1 PRIO: 15
+Time slot   1
+	CPU 0: Dispatched process  1
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000000
+Time slot   2
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000000
+Time slot   3
+	CPU 0: Put process  1 to run queue
+	CPU 0: Dispatched process  1
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000000
+Time slot   4
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000000
+Time slot   5
+	CPU 0: Put process  1 to run queue
+	CPU 0: Dispatched process  1
+Time slot   6
+	CPU 0: Processed  1 has finished
+	CPU 0 stopped

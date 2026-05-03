@@ -1,0 +1,162 @@
+Time slot   0
+ld_routine
+	Loaded a process at input/proc/p0s, PID: 1 PRIO: 130
+	CPU 3: Dispatched process  1
+Time slot   1
+Time slot   2
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000000
+Page 1 -> PTE Value: 80000001
+	Loaded a process at input/proc/m0s, PID: 2 PRIO: 120
+	CPU 3: Put process  1 to run queue
+	CPU 3: Dispatched process  2
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000002
+Page 1 -> PTE Value: 80000003
+	CPU 2: Dispatched process  1
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000002
+Page 1 -> PTE Value: 80000003
+Page 2 -> PTE Value: 80000004
+Page 3 -> PTE Value: 80000005
+Time slot   3
+	Loaded a process at input/proc/s3, PID: 3 PRIO: 39
+	CPU 1: Dispatched process  3
+Time slot   4
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000006
+	CPU 2: Put process  1 to run queue
+	CPU 2: Dispatched process  1
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000006
+Page 1 -> PTE Value: 80000007
+Time slot   5
+	CPU 3: Put process  2 to run queue
+	CPU 3: Dispatched process  2
+	Loaded a process at input/proc/s0, PID: 4 PRIO: 38
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000008
+	CPU 1: Put process  3 to run queue
+	CPU 1: Dispatched process  4
+Time slot   6
+	CPU 0: Dispatched process  3
+	CPU 3: Put process  2 to run queue
+	CPU 3: Dispatched process  2
+	CPU 2: Put process  1 to run queue
+	CPU 2: Dispatched process  1
+libread:365
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000008
+Time slot   7
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000008
+	CPU 1: Put process  4 to run queue
+	CPU 1: Dispatched process  4
+Time slot   8
+	CPU 0: Put process  3 to run queue
+	CPU 0: Dispatched process  3
+	Loaded a process at input/proc/m1s, PID: 5 PRIO: 15
+	CPU 3: Processed  2 has finished
+	CPU 3: Dispatched process  5
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000009
+Page 1 -> PTE Value: 8000000a
+	CPU 2: Put process  1 to run queue
+	CPU 2: Dispatched process  1
+libread:365
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000009
+Page 1 -> PTE Value: 8000000a
+Time slot   9
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 80000009
+Page 1 -> PTE Value: 8000000a
+Page 2 -> PTE Value: 8000000b
+	CPU 1: Put process  4 to run queue
+	CPU 1: Dispatched process  4
+Time slot  10
+	CPU 0: Put process  3 to run queue
+	CPU 0: Dispatched process  3
+	Loaded a process at input/proc/p1s, PID: 6 PRIO: 15
+	CPU 3: Put process  5 to run queue
+	CPU 3: Dispatched process  6
+	CPU 2: Put process  1 to run queue
+	CPU 2: Dispatched process  5
+Time slot  11
+Page table dump from addr 0 to 18446744073709551615
+Page 0 -> PTE Value: 8000000c
+	CPU 1: Put process  4 to run queue
+	CPU 1: Dispatched process  4
+Time slot  12
+	CPU 0: Put process  3 to run queue
+	CPU 0: Dispatched process  3
+	Loaded a process at input/proc/s2, PID: 7 PRIO: 120
+	CPU 3: Put process  6 to run queue
+	CPU 3: Dispatched process  7
+	CPU 2: Put process  5 to run queue
+	CPU 2: Dispatched process  1
+libread:365
+Page table dump from addr 0 to 18446744073709551615
+Time slot  13
+	CPU 1: Put process  4 to run queue
+	CPU 1: Dispatched process  6
+Time slot  14
+	CPU 0: Put process  3 to run queue
+	CPU 0: Dispatched process  5
+	CPU 3: Put process  7 to run queue
+	CPU 3: Dispatched process  4
+	CPU 2: Put process  1 to run queue
+	CPU 2: Dispatched process  3
+Time slot  15
+	Loaded a process at input/proc/s1, PID: 8 PRIO: 0
+	CPU 2: Processed  3 has finished
+	CPU 2: Dispatched process  7
+	CPU 1: Put process  6 to run queue
+	CPU 1: Dispatched process  1
+Time slot  16
+	CPU 0: Processed  5 has finished
+	CPU 0: Dispatched process  8
+	CPU 3: Put process  4 to run queue
+	CPU 3: Dispatched process  6
+Time slot  17
+	CPU 2: Put process  7 to run queue
+	CPU 2: Dispatched process  4
+	CPU 1: Processed  1 has finished
+	CPU 1: Dispatched process  7
+Time slot  18
+	CPU 0: Put process  8 to run queue
+	CPU 0: Dispatched process  8
+	CPU 3: Put process  6 to run queue
+	CPU 3: Dispatched process  6
+Time slot  19
+	CPU 2: Put process  4 to run queue
+	CPU 2: Dispatched process  4
+	CPU 1: Put process  7 to run queue
+	CPU 1: Dispatched process  7
+Time slot  20
+	CPU 0: Put process  8 to run queue
+	CPU 0: Dispatched process  8
+	CPU 3: Put process  6 to run queue
+	CPU 3: Dispatched process  6
+Time slot  21
+	CPU 2: Put process  4 to run queue
+	CPU 2: Dispatched process  4
+	CPU 1: Put process  7 to run queue
+	CPU 1: Dispatched process  7
+Time slot  22
+	CPU 0: Put process  8 to run queue
+	CPU 0: Dispatched process  8
+	CPU 3: Processed  6 has finished
+	CPU 3 stopped
+	CPU 2: Processed  4 has finished
+	CPU 2 stopped
+Time slot  23
+	CPU 0: Processed  8 has finished
+	CPU 0 stopped
+Time slot  24
+	CPU 1: Put process  7 to run queue
+	CPU 1: Dispatched process  7
+Time slot  25
+Time slot  26
+	CPU 1: Processed  7 has finished
+	CPU 1 stopped

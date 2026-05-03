@@ -331,15 +331,27 @@ int pg_setval(struct mm_struct *mm, int addr, BYTE value, struct pcb_t *caller)
  */
 int __read(struct pcb_t *caller, int vmaid, int rgid, addr_t offset, BYTE *data)
 {
+  if (caller == NULL || caller->krnl == NULL || caller->krnl->mm == NULL || data == NULL)
+    return -1;
+
+  pthread_mutex_lock(&mmvm_lock);
+
   struct vm_rg_struct *currg = get_symrg_byid(caller->krnl->mm, rgid);
+  if (currg == NULL)
+  {
+    pthread_mutex_unlock(&mmvm_lock); /* unlock before early return */
+    return -1;
+  }
 
-//struct vm_area_struct *cur_vma = get_vma_by_num(caller->krnl->mm, vmaid);
+  if (offset >= currg->rg_end - currg->rg_start)
+  {
+    pthread_mutex_unlock(&mmvm_lock); /* unlock before early return */
+    return -1;
+  }
 
-  /* TODO Invalid memory identify */
-
-  pg_getval(caller->krnl->mm, currg->rg_start + offset, data, caller);
-
-  return 0;
+  int ret = pg_getval(caller->krnl->mm, currg->rg_start + offset, data, caller);
+  pthread_mutex_unlock(&mmvm_lock);
+  return ret;
 }
 
 /*libread - PAGING-based read a region memory */
@@ -374,18 +386,31 @@ printf("%s:%d\n",__func__,__LINE__);
  */
 int __write(struct pcb_t *caller, int vmaid, int rgid, addr_t offset, BYTE value)
 {
-  pthread_mutex_lock(&mmvm_lock);
-  struct vm_rg_struct *currg = get_symrg_byid(caller->krnl->mm, rgid);
+  if (caller == NULL || caller->krnl == NULL || caller->krnl->mm == NULL)
+    return -1;
 
+  pthread_mutex_lock(&mmvm_lock);
+
+  struct vm_rg_struct *currg = get_symrg_byid(caller->krnl->mm, rgid);
   struct vm_area_struct *cur_vma = get_vma_by_num(caller->krnl->mm, vmaid);
 
-  if (currg == NULL || cur_vma == NULL) /* Invalid memory identify */
+  if (currg == NULL || cur_vma == NULL)
   {
-    pthread_mutex_unlock(&mmvm_lock);
+    pthread_mutex_unlock(&mmvm_lock); /* unlock before early return */
     return -1;
   }
 
-  pg_setval(caller->krnl->mm, currg->rg_start + offset, value, caller);
+  if (offset >= currg->rg_end - currg->rg_start)
+  {
+    pthread_mutex_unlock(&mmvm_lock); /* unlock before early return */
+    return -1;
+  }
+
+  if (pg_setval(caller->krnl->mm, currg->rg_start + offset, value, caller) != 0)
+  {
+    pthread_mutex_unlock(&mmvm_lock); /* unlock before early return */
+    return -1;
+  }
 
   pthread_mutex_unlock(&mmvm_lock);
   return 0;
@@ -529,17 +554,16 @@ int libkmem_copy_from_user(struct pcb_t *caller, uint32_t source, uint32_t desti
 
 int libkmem_copy_to_user(struct pcb_t *caller, uint32_t source, uint32_t destination, uint32_t offset, uint32_t size)
 {
-  /* TODO: provide OS level management kmem
-   */
-  /*
-   * TODO: Map kernel address range
-   */
-  //__read_kernel_mem(...)
-  //__write_user_mem(...);
+    /* TODO: provide OS level management kmem
+     */
+    /*
+     * TODO: Map kernel address range
+     */
+    //__read_kernel_mem(...)
+    //__write_user_mem(...);
 
-  return 1;
+    return 1;
 }
-
 
 /*__read_kernel_mem - read value in kernel region memory
  *@caller: caller
@@ -550,10 +574,33 @@ int libkmem_copy_to_user(struct pcb_t *caller, uint32_t source, uint32_t destina
  */
 int __read_kernel_mem(struct pcb_t *caller, int vmaid, int rgid, addr_t offset, BYTE *data)
 {
-  /* TODO: provide OS memory operator for kernel memory region */
-  //krnl->krnl_pgd ... or krnl->pgd ... based on kmem implementation strategy
+    if (caller == NULL || data == NULL)
+        return -1;
 
-  return 0;
+    pthread_mutex_lock(&mmvm_lock);
+
+    struct vm_rg_struct *currg = get_symrg_byid(caller->krnl->mm, rgid);
+    struct vm_area_struct *cur_vma = get_vma_by_num(caller->krnl->mm, vmaid);
+    if (currg == NULL || cur_vma == NULL)
+    {
+        pthread_mutex_unlock(&mmvm_lock); /* unlock before early return */
+        return -1;
+    }
+
+    if (offset >= currg->rg_end - currg->rg_start)
+    {
+        pthread_mutex_unlock(&mmvm_lock); /* unlock before early return */
+        return -1;
+    }
+
+    if (pg_getval(caller->krnl->mm, currg->rg_start + offset, data, caller) != 0)
+    {
+        pthread_mutex_unlock(&mmvm_lock); /* unlock before early return */
+        return -1;
+    }
+
+    pthread_mutex_unlock(&mmvm_lock);
+    return 0;
 }
 
 /*__write_kernel_mem - write a kernel region memory
@@ -565,10 +612,33 @@ int __read_kernel_mem(struct pcb_t *caller, int vmaid, int rgid, addr_t offset, 
  */
 int __write_kernel_mem(struct pcb_t *caller, int vmaid, int rgid, addr_t offset, BYTE value)
 {
-  /* TODO: provide OS memory operator for kernel memory region */
-  //krnl->krnl_pgd ... or krnl->pgd ... based on kmem implementation strategy
+    if (caller == NULL)
+        return -1;
 
-  return 0;
+    pthread_mutex_lock(&mmvm_lock);
+
+    struct vm_rg_struct *currg = get_symrg_byid(caller->krnl->mm, rgid);
+    struct vm_area_struct *cur_vma = get_vma_by_num(caller->krnl->mm, vmaid);
+    if (currg == NULL || cur_vma == NULL)
+    {
+        pthread_mutex_unlock(&mmvm_lock); /* unlock before early return */
+        return -1;
+    }
+
+    if (offset >= currg->rg_end - currg->rg_start)
+    {
+        pthread_mutex_unlock(&mmvm_lock); /* unlock before early return */
+        return -1;
+    }
+
+    if (pg_setval(caller->krnl->mm, currg->rg_start + offset, value, caller) != 0)
+    {
+        pthread_mutex_unlock(&mmvm_lock); /* unlock before early return */
+        return -1;
+    }
+
+    pthread_mutex_unlock(&mmvm_lock);
+    return 0;
 }
 
 /*__read_user_mem - read value in user region memory
@@ -580,12 +650,34 @@ int __write_kernel_mem(struct pcb_t *caller, int vmaid, int rgid, addr_t offset,
  */
 int __read_user_mem(struct pcb_t *caller, int vmaid, int rgid, addr_t offset, BYTE *data)
 {
-  /* TODO: provide OS level management user memory access */
-  //krnl->pgd ...
+    if (caller == NULL || data == NULL)
+        return -1;
 
-   return 0;
+    pthread_mutex_lock(&mmvm_lock);
+
+    struct vm_rg_struct *currg = get_symrg_byid(caller->krnl->mm, rgid);
+    struct vm_area_struct *cur_vma = get_vma_by_num(caller->krnl->mm, vmaid);
+    if (currg == NULL || cur_vma == NULL)
+    {
+        pthread_mutex_unlock(&mmvm_lock); /* unlock before early return */
+        return -1;
+    }
+
+    if (offset >= currg->rg_end - currg->rg_start)
+    {
+        pthread_mutex_unlock(&mmvm_lock); /* unlock before early return */
+        return -1;
+    }
+
+    if (pg_getval(caller->krnl->mm, currg->rg_start + offset, data, caller) != 0)
+    {
+        pthread_mutex_unlock(&mmvm_lock); /* unlock before early return */
+        return -1;
+    }
+
+    pthread_mutex_unlock(&mmvm_lock);
+    return 0;
 }
-
 
 /*__write_user_mem - write a user region memory
  *@caller: caller
@@ -596,10 +688,33 @@ int __read_user_mem(struct pcb_t *caller, int vmaid, int rgid, addr_t offset, BY
  */
 int __write_user_mem(struct pcb_t *caller, int vmaid, int rgid, addr_t offset, BYTE value)
 {
-  /* TODO: provide OS level management user memory access */
-  //krnl->pgd ...
+    if (caller == NULL)
+        return -1;
 
-  return 0;
+    pthread_mutex_lock(&mmvm_lock);
+
+    struct vm_rg_struct *currg = get_symrg_byid(caller->krnl->mm, rgid);
+    struct vm_area_struct *cur_vma = get_vma_by_num(caller->krnl->mm, vmaid);
+    if (currg == NULL || cur_vma == NULL)
+    {
+        pthread_mutex_unlock(&mmvm_lock); /* unlock before early return */
+        return -1;
+    }
+
+    if (offset >= currg->rg_end - currg->rg_start)
+    {
+        pthread_mutex_unlock(&mmvm_lock); /* unlock before early return */
+        return -1;
+    }
+
+    if (pg_setval(caller->krnl->mm, currg->rg_start + offset, value, caller) != 0)
+    {
+        pthread_mutex_unlock(&mmvm_lock); /* unlock before early return */
+        return -1;
+    }
+
+    pthread_mutex_unlock(&mmvm_lock);
+    return 0;
 }
 
 
