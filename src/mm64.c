@@ -115,20 +115,20 @@ int pte_set_swap(struct pcb_t *caller, addr_t pgn, int swptyp, addr_t swpoff)
   addr_t pmd = 0;
   addr_t pt = 0;
 
-  // dummy pte alloc to avoid runtime error
-  pte = malloc(sizeof(addr_t));
 #ifdef MM64
-  /* Get value from the system */
   get_pd_from_pagenum(pgn, &pgd, &p4d, &pud, &pmd, &pt);
-  if (krnl->mm->pt == NULL) {
+  if (krnl->mm->pt == NULL || pgn >= PAGING64_MAX_PGN)
     return -1;
-  }
   pte = &krnl->mm->pt[pgn];
 #else
   pte = &krnl->mm->pgd[pgn];
 #endif
 
-  SETBIT(*pte, PAGING_PTE_PRESENT_MASK);
+  /* The page is no longer present in RAM, only in swap.
+   * Clear the present bit and set swapped bit per the page-table-entry spec.
+   */
+  CLRBIT(*pte, PAGING_PTE_PRESENT_MASK);
+  CLRBIT(*pte, PAGING_PTE_FPN_MASK);
   SETBIT(*pte, PAGING_PTE_SWAPPED_MASK);
 
   SETVAL(*pte, swptyp, PAGING_PTE_SWPTYP_MASK, PAGING_PTE_SWPTYP_LOBIT);
@@ -154,15 +154,24 @@ int pte_set_fpn(struct pcb_t *caller, addr_t pgn, addr_t fpn)
   addr_t pmd = 0;
   addr_t pt = 0;
 
-  // dummy pte alloc to avoid runtime error
-  pte = malloc(sizeof(addr_t));
 #ifdef MM64
-  /* Get value from the system */
   get_pd_from_pagenum(pgn, &pgd, &p4d, &pud, &pmd, &pt);
-  if (krnl->mm->pt == NULL) {
+  if (krnl->mm->pt == NULL || pgn >= PAGING64_MAX_PGN)
     return -1;
-  }
   pte = &krnl->mm->pt[pgn];
+
+  /* Mark the cascading directory entries with the leaf-table address so that
+   * print_pgtbl can show the path that translation would take. The actual
+   * translation in this simulator goes through the flat pt array.
+   */
+  if (krnl->mm->pgd != NULL && pgd < PAGING64_MAX_PGN)
+    krnl->mm->pgd[pgd] = (addr_t)(uintptr_t)krnl->mm->p4d;
+  if (krnl->mm->p4d != NULL && p4d < PAGING64_MAX_PGN)
+    krnl->mm->p4d[p4d] = (addr_t)(uintptr_t)krnl->mm->pud;
+  if (krnl->mm->pud != NULL && pud < PAGING64_MAX_PGN)
+    krnl->mm->pud[pud] = (addr_t)(uintptr_t)krnl->mm->pmd;
+  if (krnl->mm->pmd != NULL && pmd < PAGING64_MAX_PGN)
+    krnl->mm->pmd[pmd] = (addr_t)(uintptr_t)krnl->mm->pt;
 #else
   pte = &krnl->mm->pgd[pgn];
 #endif
@@ -191,8 +200,8 @@ uint32_t pte_get_entry(struct pcb_t *caller, addr_t pgn)
   addr_t pt = 0;
 
   get_pd_from_pagenum(pgn, &pgd, &p4d, &pud, &pmd, &pt);
-  if (krnl->mm->pt != NULL) {
-    pte = krnl->mm->pt[pgn];
+  if (krnl->mm->pt != NULL && pgn < PAGING64_MAX_PGN) {
+    pte = (uint32_t)krnl->mm->pt[pgn];
   }
 
   return pte;
@@ -206,7 +215,9 @@ uint32_t pte_get_entry(struct pcb_t *caller, addr_t pgn)
 int pte_set_entry(struct pcb_t *caller, addr_t pgn, uint32_t pte_val)
 {
   struct krnl_t *krnl = caller->krnl;
-  krnl->mm->pgd[pgn] = pte_val;
+  if (krnl->mm->pt == NULL)
+    return -1;
+  krnl->mm->pt[pgn] = pte_val;
 
   return 0;
 }
@@ -376,15 +387,19 @@ int init_mm(struct mm_struct *mm, struct pcb_t *caller)
 {
   struct vm_area_struct *vma0 = malloc(sizeof(struct vm_area_struct));
 
-  /* Init page table directory */
+  /* Init page directories.
+   * In our simplified flat 5-level paging model, each directory level keeps
+   * a page-number indexed array; the leaf "pt" stores the actual PTE values.
+   * We size them for the addressable range used by the simulator workloads.
+   */
 #ifdef MM64
-  mm->pgd = calloc(PAGING_MAX_SYMTBL_SZ, sizeof(uint64_t));
-  mm->p4d = calloc(PAGING_MAX_SYMTBL_SZ, sizeof(uint64_t));
-  mm->pud = calloc(PAGING_MAX_SYMTBL_SZ, sizeof(uint64_t));
-  mm->pmd = calloc(PAGING_MAX_SYMTBL_SZ, sizeof(uint64_t));
-  mm->pt  = calloc(PAGING_MAX_SYMTBL_SZ, sizeof(uint64_t));
+  mm->pgd = calloc(PAGING64_MAX_PGN, sizeof(uint64_t));
+  mm->p4d = calloc(PAGING64_MAX_PGN, sizeof(uint64_t));
+  mm->pud = calloc(PAGING64_MAX_PGN, sizeof(uint64_t));
+  mm->pmd = calloc(PAGING64_MAX_PGN, sizeof(uint64_t));
+  mm->pt  = calloc(PAGING64_MAX_PGN, sizeof(uint64_t));
 #else
-  mm->pgd = calloc(PAGING_MAX_SYMTBL_SZ, sizeof(uint32_t));
+  mm->pgd = calloc(PAGING_MAX_PGN, sizeof(uint32_t));
 #endif
 
   /* By default the owner comes with at least one vma */
@@ -518,13 +533,12 @@ int print_list_pgn(struct pgn_t *ip)
 
 int print_pgtbl(struct pcb_t *caller, addr_t start, addr_t end)
 {
-  addr_t pgn_start = start / PAGING_PAGESZ;
-  /* Clamp end to the actual page table size (PAGING_MAX_SYMTBL_SZ entries) */
-  addr_t max_pgn = PAGING_MAX_SYMTBL_SZ - 1;
-  addr_t pgn_end = (end == (addr_t)-1 || end / PAGING_PAGESZ > max_pgn)
-                   ? max_pgn : end / PAGING_PAGESZ;
+  /* Clamp end to the actual page table size (PAGING64_MAX_PGN entries) */
+  addr_t max_pgn = PAGING64_MAX_PGN - 1;
+  addr_t pgn_start = start / PAGING64_PAGESZ;
+  addr_t pgn_end = (end == (addr_t)-1 || end / PAGING64_PAGESZ > max_pgn)
+                   ? max_pgn : end / PAGING64_PAGESZ;
   addr_t pgit;
-  struct krnl_t *krnl = caller->krnl;
 
   addr_t pgd = 0;
   addr_t p4d = 0;
@@ -534,15 +548,17 @@ int print_pgtbl(struct pcb_t *caller, addr_t start, addr_t end)
 
   get_pd_from_address(start, &pgd, &p4d, &pud, &pmd, &pt);
 
-  printf("Page table dump from addr " FORMAT_ADDR " to " FORMAT_ADDR "\n", start, end);
+  printf("print_pgtbl: PID=%u\n", caller->pid);
+  printf(" PGD[%lu] P4D[%lu] PUD[%lu] PMD[%lu] PT[%lu]\n",
+         (unsigned long)pgd, (unsigned long)p4d, (unsigned long)pud,
+         (unsigned long)pmd, (unsigned long)pt);
   for (pgit = pgn_start; pgit <= pgn_end; pgit++) {
     uint32_t pte = pte_get_entry(caller, pgit);
     if (pte != 0) {
-      printf("Page %lu -> PTE Value: %08x\n", pgit, pte);
+      printf("  Page %lu -> PTE 0x%08x\n", (unsigned long)pgit, pte);
     }
   }
 
-  (void)krnl; /* suppress unused warning */
   return 0;
 }
 
