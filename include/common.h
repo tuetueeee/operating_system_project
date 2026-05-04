@@ -115,7 +115,10 @@ struct pcb_t
 	// and this vale overwrites the default priority when it existed
 	uint32_t prio;
 #endif
-	struct krnl_t *krnl;	
+	struct krnl_t *krnl;
+#ifdef MM_PAGING
+	struct mm_struct *mm;	 // Per-process memory mapping
+#endif
 	struct page_table_t *page_table; // Page table
 	uint32_t bp;			 // Break pointer
 };
