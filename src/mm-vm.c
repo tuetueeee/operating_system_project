@@ -129,45 +129,37 @@ int validate_overlap_vm_area(struct pcb_t *caller, int vmaid, addr_t vmastart, a
  */
 int inc_vma_limit(struct pcb_t *caller, int vmaid, addr_t inc_sz)
 {
-  struct vm_rg_struct *newrg = malloc(sizeof(struct vm_rg_struct));
   struct vm_area_struct *cur_vma = get_vma_by_num(caller->mm, vmaid);
 
   if (cur_vma == NULL)
-  {
-    free(newrg);
     return -1;
-  }
 
-  /* Làm tròn số trang cần cấp phát (Page Alignment) */
+  /* Page-align the requested increment. */
   int incnumpage = (inc_sz + PAGING_PAGESZ - 1) / PAGING_PAGESZ;
-  addr_t inc_amt = incnumpage * PAGING_PAGESZ;
+  addr_t inc_amt = (addr_t)incnumpage * PAGING_PAGESZ;
 
   addr_t old_end = cur_vma->sbrk;
+  addr_t old_vmend = cur_vma->vm_end;
   addr_t new_end = old_end + inc_amt;
 
-  /* Validate overlap of obtained region */
   if (validate_overlap_vm_area(caller, vmaid, old_end, new_end) < 0)
-  {
-    free(newrg);
-    return -1; /* Overlap and failed allocation */
-  }
+    return -1;
 
-  /* Cập nhật ranh giới VMA mới */
   cur_vma->sbrk = new_end;
   if (cur_vma->sbrk > cur_vma->vm_end)
-  {
     cur_vma->vm_end = cur_vma->sbrk;
-  }
 
-  /* Đồng bộ lại tên hàm thành vm_map_range theo mm.h */
+  /* The mapped-region descriptor is consumed only by the caller's
+   * bookkeeping; keep it on the stack so we don't have to free it.
+   */
+  struct vm_rg_struct mapped_rg = { 0 };
   if (vm_map_range(caller, cur_vma->vm_start, cur_vma->vm_end,
-                   old_end, incnumpage, newrg) < 0)
+                   old_end, incnumpage, &mapped_rg) < 0)
   {
-    /* Khôi phục lại trạng thái cũ nếu map ram thất bại */
+    /* Restore VMA limits so subsequent allocations see consistent state. */
     cur_vma->sbrk = old_end;
-    cur_vma->vm_end = old_end;
-    free(newrg);
-    return -1; /* Map the memory to MEMRAM failed */
+    cur_vma->vm_end = old_vmend;
+    return -1;
   }
 
   return 0;

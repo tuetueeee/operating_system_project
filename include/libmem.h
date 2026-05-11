@@ -26,3 +26,8 @@ int libkmem_cache_alloc(struct pcb_t *, uint32_t, uint32_t);
 int libkmem_cache_pool_create(struct pcb_t*, uint32_t, uint32_t, uint32_t);
 int libkmem_copy_from_user(struct pcb_t*, uint32_t, uint32_t, uint32_t, uint32_t);
 int libkmem_copy_to_user(struct pcb_t*, uint32_t, uint32_t, uint32_t, uint32_t);
+
+/* Release all per-process resources (frames, page tables, mm, code segment,
+ * and the PCB itself). Safe to call when the process has finished. */
+void free_pcb(struct pcb_t *proc);
+int  free_pcb_memph(struct pcb_t *caller);

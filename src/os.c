@@ -3,6 +3,7 @@
 #include "timer.h"
 #include "sched.h"
 #include "loader.h"
+#include "libmem.h"
 #include "mm.h"
 #ifdef MM64
 #include "mm64.h"
@@ -19,8 +20,8 @@ static int done = 0;
 static struct krnl_t os;
 
 #ifdef MM_PAGING
-static unsigned long memramsz;
-static unsigned long memswpsz[PAGING_MAX_MMSWP];
+static arg_t memramsz;
+static arg_t memswpsz[PAGING_MAX_MMSWP];
 
 struct mmpaging_ld_args {
 	/* A dispatched argument struct to compact many-fields passing to loader */
@@ -69,7 +70,7 @@ static void * cpu_routine(void * args) {
 			printf("\tCPU %d: Processed %2d has finished\n",
 				id ,proc->pid);
 			remove_proc(proc);
-			free(proc);
+			free_pcb(proc);
 			proc = get_proc();
 			time_left = 0;
 		}else if (time_left == 0) {
@@ -296,9 +297,27 @@ int main(int argc, char * argv[]) {
 
 	/* Stop timer */
 	stop_timer();
+	finish_scheduler();
+
+#ifdef MM_PAGING
+	finish_memphy(&mram);
+	for (sit = 0; sit < PAGING_MAX_MMSWP; sit++)
+		finish_memphy(&mswp[sit]);
+	free(mm_ld_args);
+#ifdef MM64
+	free(os.krnl_pgd);
+	free(os.krnl_p4d);
+	free(os.krnl_pud);
+	free(os.krnl_pmd);
+	free(os.krnl_pt);
+#else
+	free(os.krnl_pgd);
+#endif
+#endif
+	free(cpu);
+	free(args);
 
 	return 0;
-
 }
 
 
