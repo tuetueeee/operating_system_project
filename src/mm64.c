@@ -106,26 +106,12 @@ int get_pd_from_pagenum(addr_t pgn, addr_t *pgd, addr_t *p4d, addr_t *pud, addr_
  */
 int pte_set_swap(struct pcb_t *caller, addr_t pgn, int swptyp, addr_t swpoff)
 {
-  struct krnl_t *krnl = caller->krnl;
-
-  addr_t *pte;
-  addr_t pgd = 0;
-  addr_t p4d = 0;
-  addr_t pud = 0;
-  addr_t pmd = 0;
-  addr_t pt = 0;
-
-#ifdef MM64
-  get_pd_from_pagenum(pgn, &pgd, &p4d, &pud, &pmd, &pt);
   if (caller->mm->pt == NULL || pgn >= PAGING64_MAX_PGN)
     return -1;
-  pte = &caller->mm->pt[pgn];
-#else
-  pte = &caller->mm->pgd[pgn];
-#endif
+  addr_t *pte = &caller->mm->pt[pgn];
 
-  /* The page is no longer present in RAM, only in swap.
-   * Clear the present bit and set swapped bit per the page-table-entry spec.
+  /* The page is no longer present in RAM, only in swap. Clear the present
+   * bit and set the swapped bit per the page-table-entry spec.
    */
   CLRBIT(*pte, PAGING_PTE_PRESENT_MASK);
   CLRBIT(*pte, PAGING_PTE_FPN_MASK);
@@ -145,25 +131,16 @@ int pte_set_swap(struct pcb_t *caller, addr_t pgn, int swptyp, addr_t swpoff)
  */
 int pte_set_fpn(struct pcb_t *caller, addr_t pgn, addr_t fpn)
 {
-  struct krnl_t *krnl = caller->krnl;
-
-  addr_t *pte;
-  addr_t pgd = 0;
-  addr_t p4d = 0;
-  addr_t pud = 0;
-  addr_t pmd = 0;
-  addr_t pt = 0;
-
-#ifdef MM64
-  get_pd_from_pagenum(pgn, &pgd, &p4d, &pud, &pmd, &pt);
   if (caller->mm->pt == NULL || pgn >= PAGING64_MAX_PGN)
     return -1;
-  pte = &caller->mm->pt[pgn];
 
-  /* Mark the cascading directory entries with the leaf-table address so that
-   * print_pgtbl can show the path that translation would take. The actual
-   * translation in this simulator goes through the flat pt array.
+  /* Walk the 5 directory indices and mark the cascading entries with the
+   * leaf-table address so print_pgtbl can show the path translation would
+   * take. The actual translation goes through the flat pt array.
    */
+  addr_t pgd = 0, p4d = 0, pud = 0, pmd = 0, pt = 0;
+  get_pd_from_pagenum(pgn, &pgd, &p4d, &pud, &pmd, &pt);
+
   if (caller->mm->pgd != NULL && pgd < PAGING64_MAX_PGN)
     caller->mm->pgd[pgd] = (addr_t)(uintptr_t)caller->mm->p4d;
   if (caller->mm->p4d != NULL && p4d < PAGING64_MAX_PGN)
@@ -172,13 +149,10 @@ int pte_set_fpn(struct pcb_t *caller, addr_t pgn, addr_t fpn)
     caller->mm->pud[pud] = (addr_t)(uintptr_t)caller->mm->pmd;
   if (caller->mm->pmd != NULL && pmd < PAGING64_MAX_PGN)
     caller->mm->pmd[pmd] = (addr_t)(uintptr_t)caller->mm->pt;
-#else
-  pte = &caller->mm->pgd[pgn];
-#endif
 
+  addr_t *pte = &caller->mm->pt[pgn];
   SETBIT(*pte, PAGING_PTE_PRESENT_MASK);
   CLRBIT(*pte, PAGING_PTE_SWAPPED_MASK);
-
   SETVAL(*pte, fpn, PAGING_PTE_FPN_MASK, PAGING_PTE_FPN_LOBIT);
 
   return 0;
@@ -191,20 +165,9 @@ int pte_set_fpn(struct pcb_t *caller, addr_t pgn, addr_t fpn)
  **/
 uint32_t pte_get_entry(struct pcb_t *caller, addr_t pgn)
 {
-  struct krnl_t *krnl = caller->krnl;
-  uint32_t pte = 0;
-  addr_t pgd = 0;
-  addr_t p4d = 0;
-  addr_t pud = 0;
-  addr_t pmd = 0;
-  addr_t pt = 0;
-
-  get_pd_from_pagenum(pgn, &pgd, &p4d, &pud, &pmd, &pt);
-  if (caller->mm->pt != NULL && pgn < PAGING64_MAX_PGN) {
-    pte = (uint32_t)caller->mm->pt[pgn];
-  }
-
-  return pte;
+  if (caller->mm->pt == NULL || pgn >= PAGING64_MAX_PGN)
+    return 0;
+  return (uint32_t)caller->mm->pt[pgn];
 }
 
 /* Set PTE page table entry
@@ -214,8 +177,7 @@ uint32_t pte_get_entry(struct pcb_t *caller, addr_t pgn)
  **/
 int pte_set_entry(struct pcb_t *caller, addr_t pgn, uint32_t pte_val)
 {
-  struct krnl_t *krnl = caller->krnl;
-  if (caller->mm->pt == NULL)
+  if (caller->mm->pt == NULL || pgn >= PAGING64_MAX_PGN)
     return -1;
   caller->mm->pt[pgn] = pte_val;
 
@@ -229,12 +191,12 @@ int vmap_pgd_memset(struct pcb_t *caller, // process call
                     addr_t addr,          // start address which is aligned to pagesz
                     int pgnum)            // num of mapping page
 {
-  int pgit = 0;
   uint64_t pattern = 0xdeadbeef;
   addr_t pgn_start = addr / PAGING_PAGESZ;
 
-  for (pgit = 0; pgit < pgnum; pgit++) {
-    pte_set_entry(caller, pgn_start + pgit, pattern);
+  for (int pgit = 0; pgit < pgnum; pgit++) {
+    if (pte_set_entry(caller, pgn_start + pgit, pattern) != 0)
+      return -1;
   }
 
   return 0;
@@ -250,7 +212,6 @@ addr_t vmap_page_range(struct pcb_t *caller,           // process call
                        struct vm_rg_struct *ret_rg)    // return mapped region, the real mapped fp
 {                                                      // no guarantee all given pages are mapped
   struct framephy_struct *fpit = frames;
-  int pgit = 0;
   addr_t pgn_start = addr / PAGING_PAGESZ;
 
   /* Update the rg_end and rg_start of ret_rg */
@@ -258,17 +219,27 @@ addr_t vmap_page_range(struct pcb_t *caller,           // process call
   ret_rg->rg_end = addr + (pgnum * PAGING_PAGESZ);
   ret_rg->vmaid = 0;
 
-  /* Map range of frame to address space */
-  for (pgit = 0; pgit < pgnum; pgit++) {
+  /* Map range of frame to address space. The framephy_struct nodes are
+   * consumed here — once the FPN is committed to the page table we
+   * release the node so the caller doesn't need to walk the list again.
+   */
+  for (int pgit = 0; pgit < pgnum && fpit != NULL; pgit++) {
     addr_t pgn = pgn_start + pgit;
-    if (fpit != NULL) {
-      pte_set_fpn(caller, pgn, fpit->fpn);
+    pte_set_fpn(caller, pgn, fpit->fpn);
+    enlist_pgn_node(&caller->mm->fifo_pgn, pgn);
 
-      /* Tracking for later page replacement activities */
-      enlist_pgn_node(&caller->mm->fifo_pgn, pgn);
+    struct framephy_struct *next = fpit->fp_next;
+    free(fpit);
+    fpit = next;
+  }
 
-      fpit = fpit->fp_next;
-    }
+  /* Free any trailing frames that weren't mapped (shouldn't normally
+   * happen, but be defensive). */
+  while (fpit != NULL) {
+    struct framephy_struct *next = fpit->fp_next;
+    MEMPHY_put_freefp(caller->krnl->mram, fpit->fpn);
+    free(fpit);
+    fpit = next;
   }
 
   return 0;

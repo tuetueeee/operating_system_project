@@ -37,15 +37,13 @@ int read(
 { // Index of destination register
 
 	BYTE data;
-	if (read_mem(proc->regs[source] + offset, proc, &data))
+	/* read_mem returns 0 on success per mem.c contract */
+	if (read_mem(proc->regs[source] + offset, proc, &data) == 0)
 	{
 		proc->regs[destination] = data;
 		return 0;
 	}
-	else
-	{
-		return 1;
-	}
+	return 1;
 }
 
 int write(

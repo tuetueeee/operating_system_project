@@ -70,6 +70,8 @@ int MEMPHY_seq_read(struct memphy_struct *mp, addr_t addr, BYTE *value)
  */
 int MEMPHY_read(struct memphy_struct *mp, addr_t addr, BYTE *value)
 {
+   int ret = 0;
+
    if (mp == NULL)
       return -1;
 
@@ -77,10 +79,10 @@ int MEMPHY_read(struct memphy_struct *mp, addr_t addr, BYTE *value)
    if (mp->rdmflg)
       *value = mp->storage[addr];
    else /* Sequential access device */
-      return MEMPHY_seq_read(mp, addr, value);
+      ret = MEMPHY_seq_read(mp, addr, value);
    pthread_mutex_unlock(&mem_lock);
 
-   return 0;
+   return ret;
 }
 
 /*
@@ -112,6 +114,8 @@ int MEMPHY_seq_write(struct memphy_struct *mp, addr_t addr, BYTE value)
  */
 int MEMPHY_write(struct memphy_struct *mp, addr_t addr, BYTE data)
 {
+   int ret = 0;
+
    if (mp == NULL)
       return -1;
 
@@ -119,10 +123,10 @@ int MEMPHY_write(struct memphy_struct *mp, addr_t addr, BYTE data)
    if (mp->rdmflg)
       mp->storage[addr] = data;
    else /* Sequential access device */
-      return MEMPHY_seq_write(mp, addr, data);
+      ret = MEMPHY_seq_write(mp, addr, data);
    pthread_mutex_unlock(&mem_lock);
 
-   return 0;
+   return ret;
 }
 
 /*
@@ -191,10 +195,11 @@ int MEMPHY_dump(struct memphy_struct *mp)
    printf("\n--- Physical Memory Dump (Size: %ld) ---\n", (long)mp->maxsz);
     
    int has_data = 0;
-   for (addr_t addr = 0; addr < mp->maxsz; addr++) {
+   for (addr_t addr = 0; addr < (addr_t)mp->maxsz; addr++) {
         /* Chỉ in các ô nhớ có giá trị khác 0 để dễ theo dõi */
         if (mp->storage[addr] != 0) {
-            printf("[0x%08lx]: 0x%02x\n", addr, mp->storage[addr]);
+            printf("[0x%08llx]: 0x%02x\n",
+                   (unsigned long long)addr, mp->storage[addr]);
             has_data = 1;
         }
     }
@@ -230,14 +235,44 @@ int init_memphy(struct memphy_struct *mp, addr_t max_size, int randomflg)
    mp->maxsz = max_size;
    memset(mp->storage, 0, max_size * sizeof(BYTE));
 
+   mp->free_fp_list = NULL;
+   mp->used_fp_list = NULL;
+
    MEMPHY_format(mp, PAGING_PAGESZ);
 
    mp->rdmflg = (randomflg != 0) ? 1 : 0;
 
-   if (!mp->rdmflg) /* Not Ramdom acess device, then it serial device*/
+   if (!mp->rdmflg) /* Not Random acess device, then it is a serial device */
       mp->cursor = 0;
 
    return 0;
+}
+
+/* Release all memory owned by a MEMPHY: the byte buffer and the
+ * free/used frame-tracking linked lists. */
+void finish_memphy(struct memphy_struct *mp)
+{
+   if (mp == NULL)
+      return;
+
+   struct framephy_struct *fp = mp->free_fp_list;
+   while (fp != NULL) {
+      struct framephy_struct *next = fp->fp_next;
+      free(fp);
+      fp = next;
+   }
+   mp->free_fp_list = NULL;
+
+   fp = mp->used_fp_list;
+   while (fp != NULL) {
+      struct framephy_struct *next = fp->fp_next;
+      free(fp);
+      fp = next;
+   }
+   mp->used_fp_list = NULL;
+
+   free(mp->storage);
+   mp->storage = NULL;
 }
 
 // #endif
