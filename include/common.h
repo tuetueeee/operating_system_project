@@ -36,12 +36,13 @@
 
 typedef ARG_TYPE arg_t;
 
-/* 
+/*
  * @bksysnet: the format string need to be redefined
- *            based on the address mode
+ *            based on the address mode. uint64_t is typically
+ *            "unsigned long long" on macOS/Linux so use %llu.
  */
 #ifdef MM64
-#define FORMAT_ARG "%lu"
+#define FORMAT_ARG "%llu"
 #else
 #define FORMAT_ARG "%u"
 #endif

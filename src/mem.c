@@ -62,8 +62,7 @@ static int translate(
 		struct pcb_t * proc) {  // Process uses given virtual address
 
 	/* Offset of the virtual address */
-	addr_t offset = get_offset(virtual_addr);
-        offset++; offset--;
+	(void)get_offset(virtual_addr);
 	/* The first layer index */
 	addr_t first_lv = get_first_lv(virtual_addr);
 	/* The second layer index */
