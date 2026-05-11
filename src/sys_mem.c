@@ -57,37 +57,20 @@ int __sys_memmap(struct krnl_t *krnl, uint32_t pid, struct sc_regs *regs)
     switch (memop)
     {
     case SYSMEM_MAP_OP:
-        /* vmap_pgd_memset will be implemented in mm64.c for the 64-bit scheme */
-        vmap_pgd_memset(caller, regs->a2, regs->a3);
-        break;
+        return vmap_pgd_memset(caller, regs->a2, regs->a3);
     case SYSMEM_INC_OP:
-        inc_vma_limit(caller, regs->a2, regs->a3);
-        break;
+        return inc_vma_limit(caller, regs->a2, regs->a3);
     case SYSMEM_SWP_OP:
-        __mm_swap_page(caller, regs->a2, regs->a3);
-        break;
+        return __mm_swap_page(caller, regs->a2, regs->a3);
     case SYSMEM_IO_READ:
-        // Đọc từ RAM và trả giá trị về cho User space qua register a3
-        if (MEMPHY_read(caller->krnl->mram, regs->a2, &value) == 0)
-        {
-            regs->a3 = value;
-        }
-        else
-        {
+        if (MEMPHY_read(caller->krnl->mram, regs->a2, &value) != 0)
             return -1;
-        }
-        break;
+        regs->a3 = value;
+        return 0;
     case SYSMEM_IO_WRITE:
-        // Ghi giá trị từ register a3 của User space xuống RAM
-        if (MEMPHY_write(caller->krnl->mram, regs->a2, regs->a3) != 0)
-        {
-            return -1;
-        }
-        break;
+        return MEMPHY_write(caller->krnl->mram, regs->a2, regs->a3);
     default:
         printf("Loi: Ma memop khong hop le: %d\n", memop);
         return -1;
     }
-
-    return 0;
 }

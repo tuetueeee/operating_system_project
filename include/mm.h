@@ -5,7 +5,13 @@
 
 /* CPU Bus definition */
 #define PAGING_CPU_BUS_WIDTH 22 /* 22bit bus - MAX SPACE 4MB */
-#define PAGING_PAGESZ  256      /* 256B or 8-bits PAGE NUMBER */
+/* Frame/page size used by the entire paging path (mm-vm, mm64, mm-memphy,
+ * libmem). The simulator uses 256B frames so that the small-memory test
+ * configs (e.g. 2KB RAM) still have a few frames to allocate from.
+ * mm64.h still defines PAGING64_PAGESZ as the architectural 4KB constant for
+ * address-layout computations, but the unit of physical allocation is this.
+ */
+#define PAGING_PAGESZ  256      /* 256B frame; 8-bit page offset */
 #define PAGING_MEMRAMSZ BIT(21)
 #define PAGING_PAGE_ALIGNSZ(sz) (DIV_ROUND_UP(sz,PAGING_PAGESZ)*PAGING_PAGESZ)
 
@@ -114,12 +120,6 @@ int __swap_cp_page(struct memphy_struct *mpsrc, addr_t srcfpn,
 addr_t __kmalloc(struct pcb_t *caller, int vmaid, int rgid, addr_t size, addr_t *alloc_addr);
 addr_t __kmem_cache_alloc(struct pcb_t *caller, int vmaid, int rgid, int cache_pool_id, addr_t *alloc_addr);
 
-/* VM region prototypes */
-int __read_user_mem(struct pcb_t *caller, int vmaid, int rgid, addr_t offset, BYTE *data);
-int __write_user_mem(struct pcb_t *caller, int vmaid, int rgid, addr_t offset, BYTE value);
-int __read_kernel_mem(struct pcb_t *caller, int vmaid, int rgid, addr_t offset, BYTE *data);
-int __write_kernel_mem(struct pcb_t *caller, int vmaid, int rgid, addr_t offset, BYTE value);
-
 /* Page directory prototypes */
 int get_pd_from_address(addr_t addr, addr_t* pgd, addr_t* p4d, addr_t* pud, addr_t* pmd, addr_t* pt);
 int get_pd_from_pagenum(addr_t pgn, addr_t* pgd, addr_t* p4d, addr_t* pud, addr_t* pmd, addr_t* pt);
@@ -168,6 +168,7 @@ int MEMPHY_read(struct memphy_struct * mp, addr_t addr, BYTE *value);
 int MEMPHY_write(struct memphy_struct * mp, addr_t addr, BYTE data);
 int MEMPHY_dump(struct memphy_struct * mp);
 int init_memphy(struct memphy_struct *mp, addr_t max_size, int randomflg);
+void finish_memphy(struct memphy_struct *mp);
 
 /* print list */
 int print_list_fp(struct framephy_struct *fp);

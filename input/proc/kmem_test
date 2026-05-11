@@ -1,0 +1,11 @@
+1 10
+alloc 100 0
+write 65 0 0
+write 66 0 1
+write 67 0 2
+kmalloc 50 1
+copy_from_user 0 1 0 3
+kmem_cache_create 200 8 0
+kmem_cache_alloc 2 0
+free 0
+free 1
