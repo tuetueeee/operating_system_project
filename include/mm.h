@@ -89,21 +89,11 @@
 #define PAGING_SWP_MASK  GENMASK(PAGING_SWP_HIBIT,PAGING_SWP_LOBIT)
 
 /* Extract OFFSET */
-//#define PAGING_OFFST(x)  ((x&PAGING_OFFST_MASK) >> PAGING_ADDR_OFFST_LOBIT)
 #define PAGING_OFFST(x)  GETVAL(x,PAGING_OFFST_MASK,PAGING_ADDR_OFFST_LOBIT)
-/* Extract Page Number*/
+/* Extract Page Number */
 #define PAGING_PGN(x)  GETVAL(x,PAGING_PGN_MASK,PAGING_ADDR_PGN_LOBIT)
-/* Extract FramePHY Number*/
+/* Extract Frame Physical Number */
 #define PAGING_FPN(x)  GETVAL(x,PAGING_PTE_FPN_MASK,PAGING_PTE_FPN_LOBIT)
-/* Extract SWAPFPN */
-#define PAGING_PGN(x)  GETVAL(x,PAGING_PGN_MASK,PAGING_ADDR_PGN_LOBIT)
-/* Extract SWAPTYPE */
-#define PAGING_FPN(x)  GETVAL(x,PAGING_PTE_FPN_MASK,PAGING_PTE_FPN_LOBIT)
-
-/* Memory range operator */
-/* TODO implement the INCLUDE and OVERLAP checking mechanism */
-#define INCLUDE(x1,x2,y1,y2) (0)
-#define OVERLAP(x1,x2,y1,y2) (0)
 
 /* VM region prototypes */
 struct vm_rg_struct * init_vm_rg(addr_t rg_start, addr_t rg_end);
@@ -113,7 +103,6 @@ int vmap_pgd_memset(struct pcb_t *caller, addr_t addr, int pgnum);
 addr_t vmap_page_range(struct pcb_t *caller, addr_t addr, int pgnum, 
                     struct framephy_struct *frames, struct vm_rg_struct *ret_rg);
 addr_t vm_map_range(struct pcb_t *caller, addr_t astart, addr_t aend, addr_t mapstart, int incpgnum, struct vm_rg_struct *ret_rg);
-addr_t vm_map_kernel(struct pcb_t *caller, addr_t astart, addr_t aend, addr_t mapstart, int incpgnum, struct vm_rg_struct *ret_rg);
 addr_t alloc_pages_range(struct pcb_t *caller, int incpgnum, struct framephy_struct **frm_lst);
 int __swap_cp_page(struct memphy_struct *mpsrc, addr_t srcfpn,
                 struct memphy_struct *mpdst, addr_t dstfpn) ;
@@ -128,32 +117,12 @@ int pte_set_fpn(struct pcb_t *caller, addr_t pgn, addr_t fpn);
 int pte_set_swap(struct pcb_t *caller, addr_t pgn, int swptyp, addr_t swpoff);
 uint32_t pte_get_entry(struct pcb_t *caller, addr_t pgn);
 int pte_set_entry(struct pcb_t *caller, addr_t pgn, uint32_t pte_val);
-int init_pte(addr_t *pte,
-             int pre,    // present
-             addr_t fpn,    // FPN
-             int drt,    // dirty
-             int swp,    // swap
-             int swptyp, // swap type
-             addr_t swpoff); //swap offset
 int __alloc(struct pcb_t *caller, int vmaid, int rgid, addr_t size, addr_t *alloc_addr);
 int __free(struct pcb_t *caller, int vmaid, int rgid);
 int __read(struct pcb_t *caller, int vmaid, int rgid, addr_t offset, BYTE *data);
 int __write(struct pcb_t *caller, int vmaid, int rgid, addr_t offset, BYTE value);
 int init_mm(struct mm_struct *mm, struct pcb_t *caller);
 
-/* VM prototypes */
-int pgalloc(struct pcb_t *proc, uint32_t size, uint32_t reg_index);
-int pgfree_data(struct pcb_t *proc, uint32_t reg_index);
-int pgread(
-		struct pcb_t * proc, // Process executing the instruction
-		uint32_t source, // Index of source register
-		addr_t offset, // Source address = [source] + [offset]
-		uint32_t destination);
-int pgwrite(
-		struct pcb_t * proc, // Process executing the instruction
-		BYTE data, // Data to be wrttien into memory
-		uint32_t destination, // Index of destination register
-		addr_t offset);
 /* Local VM prototypes */
 struct vm_rg_struct * get_symrg_byid(struct mm_struct* mm, int rgid);
 int validate_overlap_vm_area(struct pcb_t *caller, int vmaid, addr_t vmastart, addr_t vmaend);
@@ -171,12 +140,5 @@ int MEMPHY_dump(struct memphy_struct * mp);
 int init_memphy(struct memphy_struct *mp, addr_t max_size, int randomflg);
 void finish_memphy(struct memphy_struct *mp);
 
-/* print list */
-int print_list_fp(struct framephy_struct *fp);
-int print_list_rg(struct vm_rg_struct *rg);
-int print_list_vma(struct vm_area_struct *rg);
-
-
-int print_list_pgn(struct pgn_t *ip);
 int print_pgtbl(struct pcb_t *ip, addr_t start, addr_t end);
 #endif

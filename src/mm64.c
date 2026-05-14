@@ -22,45 +22,6 @@
 #if defined(MM64)
 
 /*
- * init_pte - Initialize PTE entry
- */
-int init_pte(addr_t *pte,
-             int pre,       // present
-             addr_t fpn,    // FPN
-             int drt,       // dirty
-             int swp,       // swap
-             int swptyp,    // swap type
-             addr_t swpoff) // swap offset
-{
-  if (pre != 0)
-  {
-    if (swp == 0)
-    { // Non swap ~ page online
-      if (fpn == 0)
-        return -1; // Invalid setting
-
-      /* Valid setting with FPN */
-      SETBIT(*pte, PAGING_PTE_PRESENT_MASK);
-      CLRBIT(*pte, PAGING_PTE_SWAPPED_MASK);
-      CLRBIT(*pte, PAGING_PTE_DIRTY_MASK);
-
-      SETVAL(*pte, fpn, PAGING_PTE_FPN_MASK, PAGING_PTE_FPN_LOBIT);
-    }
-    else
-    { // page swapped
-      SETBIT(*pte, PAGING_PTE_PRESENT_MASK);
-      SETBIT(*pte, PAGING_PTE_SWAPPED_MASK);
-      CLRBIT(*pte, PAGING_PTE_DIRTY_MASK);
-
-      SETVAL(*pte, swptyp, PAGING_PTE_SWPTYP_MASK, PAGING_PTE_SWPTYP_LOBIT);
-      SETVAL(*pte, swpoff, PAGING_PTE_SWPOFF_MASK, PAGING_PTE_SWPOFF_LOBIT);
-    }
-  }
-
-  return 0;
-}
-
-/*
  * get_pd_from_address - Parse address to 5 page directory level
  * @addr  : address
  * @pgd   : page global directory
@@ -254,30 +215,37 @@ addr_t vmap_page_range(struct pcb_t *caller,           // process call
 addr_t alloc_pages_range(struct pcb_t *caller, int req_pgnum, struct framephy_struct **frm_lst)
 {
   addr_t fpn;
-  int pgit;
-  struct framephy_struct *newfp_str = NULL;
   struct framephy_struct *head = NULL;
   struct framephy_struct *tail = NULL;
 
-  for (pgit = 0; pgit < req_pgnum; pgit++)
+  for (int pgit = 0; pgit < req_pgnum; pgit++)
   {
-    if (MEMPHY_get_freefp(caller->krnl->mram, &fpn) == 0)
+    if (MEMPHY_get_freefp(caller->krnl->mram, &fpn) != 0)
     {
-      newfp_str = malloc(sizeof(struct framephy_struct));
-      newfp_str->fpn = fpn;
-      newfp_str->fp_next = NULL;
-
-      if (head == NULL) {
-        head = tail = newfp_str;
-      } else {
-        tail->fp_next = newfp_str;
-        tail = newfp_str;
+      /* Out of RAM: roll the partially-allocated chain back. Returning
+       * a half list would leak the frames into the caller's PTEs but
+       * leave the request as a whole un-fulfilled.
+       */
+      while (head != NULL)
+      {
+        struct framephy_struct *next = head->fp_next;
+        MEMPHY_put_freefp(caller->krnl->mram, head->fpn);
+        free(head);
+        head = next;
       }
+      *frm_lst = NULL;
+      return -1;
     }
-    else
-    {
-      *frm_lst = head;
-      return -3000;
+
+    struct framephy_struct *newfp_str = malloc(sizeof(struct framephy_struct));
+    newfp_str->fpn = fpn;
+    newfp_str->fp_next = NULL;
+
+    if (head == NULL)
+      head = tail = newfp_str;
+    else {
+      tail->fp_next = newfp_str;
+      tail = newfp_str;
     }
   }
   *frm_lst = head;
@@ -296,32 +264,21 @@ addr_t alloc_pages_range(struct pcb_t *caller, int req_pgnum, struct framephy_st
  */
 addr_t vm_map_range(struct pcb_t *caller, addr_t astart, addr_t aend, addr_t mapstart, int incpgnum, struct vm_rg_struct *ret_rg)
 {
+  (void)astart;
+  (void)aend;
+
   struct framephy_struct *frm_lst = NULL;
-  addr_t ret_alloc = 0;
-  int pgnum = incpgnum;
 
-  /*@bksysnet: author provides a feasible solution of getting frames
-   *FATAL logic in here, wrong behaviour if we have not enough page
-   *i.e. we request 1000 frames meanwhile our RAM has size of 3 frames
-   *Don't try to perform that case in this simple work, it will result
-   *in endless procedure of swap-off to get frame and we have not provide
-   *duplicate control mechanism, keep it simple
+  /* alloc_pages_range is all-or-nothing: on success it returns 0 with
+   * a chain of incpgnum frames; on failure it releases the partial
+   * allocation and returns (addr_t)-1. The simulator does not implement
+   * on-demand swap-out for fresh allocations, so callers are expected
+   * to size their requests to fit within free RAM.
    */
-  ret_alloc = alloc_pages_range(caller, pgnum, &frm_lst);
-
-  if (ret_alloc < 0 && ret_alloc != -3000)
+  if (alloc_pages_range(caller, incpgnum, &frm_lst) != 0)
     return -1;
 
-  /* Out of memory */
-  if (ret_alloc == -3000)
-  {
-    return -1;
-  }
-
-  /* it leaves the case of memory is enough but half in ram, half in swap
-   * do the swaping all to swapper to get the all in ram */
   vmap_page_range(caller, mapstart, incpgnum, frm_lst, ret_rg);
-
   return 0;
 }
 
@@ -421,84 +378,6 @@ int enlist_pgn_node(struct pgn_t **plist, addr_t pgn)
   pnode->pg_next = *plist;
   *plist = pnode;
 
-  return 0;
-}
-
-int print_list_fp(struct framephy_struct *ifp)
-{
-  struct framephy_struct *fp = ifp;
-
-  printf("print_list_fp: ");
-  if (fp == NULL)
-  {
-    printf("NULL list\n");
-    return -1;
-  }
-  printf("\n");
-  while (fp != NULL)
-  {
-    printf("fp[" FORMAT_ADDR "]\n", fp->fpn);
-    fp = fp->fp_next;
-  }
-  printf("\n");
-  return 0;
-}
-
-int print_list_rg(struct vm_rg_struct *irg)
-{
-  struct vm_rg_struct *rg = irg;
-
-  printf("print_list_rg: ");
-  if (rg == NULL)
-  {
-    printf("NULL list\n");
-    return -1;
-  }
-  printf("\n");
-  while (rg != NULL)
-  {
-    printf("rg[" FORMAT_ADDR "->" FORMAT_ADDR "]\n", rg->rg_start, rg->rg_end);
-    rg = rg->rg_next;
-  }
-  printf("\n");
-  return 0;
-}
-
-int print_list_vma(struct vm_area_struct *ivma)
-{
-  struct vm_area_struct *vma = ivma;
-
-  printf("print_list_vma: ");
-  if (vma == NULL)
-  {
-    printf("NULL list\n");
-    return -1;
-  }
-  printf("\n");
-  while (vma != NULL)
-  {
-    printf("va[" FORMAT_ADDR "->" FORMAT_ADDR "]\n", vma->vm_start, vma->vm_end);
-    vma = vma->vm_next;
-  }
-  printf("\n");
-  return 0;
-}
-
-int print_list_pgn(struct pgn_t *ip)
-{
-  printf("print_list_pgn: ");
-  if (ip == NULL)
-  {
-    printf("NULL list\n");
-    return -1;
-  }
-  printf("\n");
-  while (ip != NULL)
-  {
-    printf("va[" FORMAT_ADDR "]-\n", ip->pgn);
-    ip = ip->pg_next;
-  }
-  printf("n");
   return 0;
 }
 

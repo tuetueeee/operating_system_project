@@ -226,58 +226,76 @@ int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller)
 {
   uint32_t pte = pte_get_entry(caller, pgn);
 
-  if (!PAGING_PAGE_PRESENT(pte))
+  if (PAGING_PAGE_PRESENT(pte))
   {
-    /* Page not present in MEMRAM. Bring it back via swap-in. */
-    addr_t vicpgn, swpfpn;
-    addr_t vicfpn;
-    uint32_t vicpte;
-    int tgt_swptyp;
-    addr_t tgt_swpoff;
-
-    /* Pick a victim page to evict */
-    if (find_victim_page(caller->mm, &vicpgn) == -1)
-      return -1;
-
-    /* Reserve a free swap slot to hold the evicted RAM frame */
-    if (MEMPHY_get_freefp(caller->krnl->active_mswp, &swpfpn) == -1)
-      return -1;
-
-    vicpte = pte_get_entry(caller, vicpgn);
-    vicfpn = PAGING_FPN(vicpte);
-
-    /* Stash the old swap slot of the page we are bringing back, before we
-     * overwrite its PTE with the freshly-allocated MEMRAM frame.
-     */
-    tgt_swptyp = caller->krnl->active_mswp_id;
-    tgt_swpoff = PAGING_SWP(pte);
-
-    /* Swap victim frame from RAM to SWAP via SYSMEM_SWP_OP */
-    {
-      struct sc_regs regs;
-      regs.a1 = SYSMEM_SWP_OP;
-      regs.a2 = vicfpn;
-      regs.a3 = swpfpn;
-      _syscall(caller->krnl, caller->pid, 17, &regs);
-    }
-
-    /* Swap target frame from SWAP back to the now-free RAM frame */
-    __swap_cp_page(caller->krnl->active_mswp, tgt_swpoff,
-                   caller->krnl->mram, vicfpn);
-
-    /* Release the swap slot that the target page used to live in */
-    MEMPHY_put_freefp(caller->krnl->active_mswp, tgt_swpoff);
-
-    /* Update PTEs: victim is now in swap, target page is now in vicfpn */
-    pte_set_swap(caller, vicpgn, tgt_swptyp, swpfpn);
-    pte_set_fpn(caller, pgn, vicfpn);
-
-    /* Track newly-online page for future replacement decisions */
-    enlist_pgn_node(&caller->mm->fifo_pgn, pgn);
+    *fpn = PAGING_FPN(pte);
+    return 0;
   }
 
-  *fpn = PAGING_FPN(pte_get_entry(caller, pgn));
+  /* Page is not in RAM. Two possibilities:
+   *  - the page has been swapped out (PAGING_PTE_SWAPPED_MASK bit set),
+   *    in which case we swap it back in;
+   *  - the PTE is zero / not swapped, meaning the page was never mapped.
+   *    Refuse the access rather than fabricating a frame from swap slot 0.
+   */
+  if (!(pte & PAGING_PTE_SWAPPED_MASK))
+    return -1;
 
+  addr_t vicpgn = 0;
+  addr_t swpfpn = 0;
+
+  /* Pick a victim page to evict from RAM. */
+  if (find_victim_page(caller->mm, &vicpgn) == -1)
+    return -1;
+
+  /* Reserve a free swap slot to hold the evicted RAM frame. If the swap
+   * device is full we have to put the victim back into the FIFO list so
+   * it can be picked again later, otherwise it would silently disappear
+   * from page-replacement tracking.
+   */
+  if (MEMPHY_get_freefp(caller->krnl->active_mswp, &swpfpn) == -1)
+  {
+    enlist_pgn_node(&caller->mm->fifo_pgn, vicpgn);
+    return -1;
+  }
+
+  uint32_t vicpte = pte_get_entry(caller, vicpgn);
+  addr_t vicfpn = PAGING_FPN(vicpte);
+
+  int tgt_swptyp = caller->krnl->active_mswp_id;
+  addr_t tgt_swpoff = PAGING_SWP(pte);
+
+  /* Swap victim frame from RAM to SWAP via SYSMEM_SWP_OP. */
+  struct sc_regs regs;
+  regs.a1 = SYSMEM_SWP_OP;
+  regs.a2 = vicfpn;
+  regs.a3 = swpfpn;
+  if (_syscall(caller->krnl, caller->pid, 17, &regs) != 0)
+  {
+    /* Roll back: release the swap slot we reserved and restore the
+     * victim's FIFO bookkeeping. The victim PTE is untouched so its
+     * data is still valid in RAM.
+     */
+    MEMPHY_put_freefp(caller->krnl->active_mswp, swpfpn);
+    enlist_pgn_node(&caller->mm->fifo_pgn, vicpgn);
+    return -1;
+  }
+
+  /* Swap target frame from SWAP back to the now-free RAM frame. */
+  __swap_cp_page(caller->krnl->active_mswp, tgt_swpoff,
+                 caller->krnl->mram, vicfpn);
+
+  /* Release the swap slot that the target page used to live in. */
+  MEMPHY_put_freefp(caller->krnl->active_mswp, tgt_swpoff);
+
+  /* Update PTEs: victim is now in swap, target page is now in vicfpn. */
+  pte_set_swap(caller, vicpgn, tgt_swptyp, swpfpn);
+  pte_set_fpn(caller, pgn, vicfpn);
+
+  /* Track newly-online page for future replacement decisions. */
+  enlist_pgn_node(&caller->mm->fifo_pgn, pgn);
+
+  *fpn = (int)vicfpn;
   return 0;
 }
 

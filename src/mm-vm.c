@@ -27,20 +27,16 @@
  */
 struct vm_area_struct *get_vma_by_num(struct mm_struct *mm, int vmaid)
 {
-  struct vm_area_struct *pvma = mm->mmap;
-
-  if (mm->mmap == NULL)
+  if (mm == NULL || mm->mmap == NULL)
     return NULL;
 
-  int vmait = pvma->vm_id;
+  struct vm_area_struct *pvma = mm->mmap;
 
-  while (vmait < vmaid)
+  while ((int)pvma->vm_id < vmaid)
   {
+    pvma = pvma->vm_next;
     if (pvma == NULL)
       return NULL;
-
-    pvma = pvma->vm_next;
-    vmait = pvma->vm_id;
   }
 
   return pvma;
@@ -50,32 +46,6 @@ int __mm_swap_page(struct pcb_t *caller, addr_t vicfpn, addr_t swpfpn)
 {
   __swap_cp_page(caller->krnl->mram, vicfpn, caller->krnl->active_mswp, swpfpn);
   return 0;
-}
-
-/*get_vm_area_node_at_brk - get vm area for a number of pages
- *@caller: caller
- *@vmaid: ID vm area to alloc memory region
- *@size: requested size
- *@alignedsz: page aligned size
- *
- */
-struct vm_rg_struct *get_vm_area_node_at_brk(struct pcb_t *caller, int vmaid, addr_t size, addr_t alignedsz)
-{
-  struct vm_rg_struct *newrg;
-  struct vm_area_struct *cur_vma = get_vma_by_num(caller->mm, vmaid);
-
-  if (cur_vma == NULL)
-    return NULL;
-
-  newrg = malloc(sizeof(struct vm_rg_struct));
-  newrg->vmaid = vmaid;
-  newrg->rg_start = cur_vma->sbrk;
-
-  /* Sử dụng alignedsz thay vì size để đảm bảo căn lề trang */
-  newrg->rg_end = newrg->rg_start + alignedsz;
-  newrg->rg_next = NULL;
-
-  return newrg;
 }
 
 /*validate_overlap_vm_area
