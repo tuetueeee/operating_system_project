@@ -106,7 +106,16 @@ switch (ins.opcode)
 		break;
 	case READ:
 #ifdef MM_PAGING
-		stat = libread(proc, ins.arg_0, ins.arg_1, (uint32_t*) &ins.arg_2);
+	{
+		/* libread fills the destination through a uint32_t* pointer.
+		 * Read into a local then commit to proc->regs[ins.arg_2] so the
+		 * value survives this stack frame.
+		 */
+		uint32_t data = 0;
+		stat = libread(proc, ins.arg_0, ins.arg_1, &data);
+		if (stat == 0)
+			proc->regs[ins.arg_2] = data;
+	}
 #else
 		stat = read(proc, ins.arg_0, ins.arg_1, ins.arg_2);
 #endif

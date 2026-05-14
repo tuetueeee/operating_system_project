@@ -53,8 +53,9 @@ int MEMPHY_seq_read(struct memphy_struct *mp, addr_t addr, BYTE *value)
    if (mp == NULL)
       return -1;
 
-   if (!mp->rdmflg)
-      return -1; /* Not compatible mode for sequential read */
+   /* Sequential read is only valid on a non-random-access device. */
+   if (mp->rdmflg)
+      return -1;
 
    MEMPHY_mv_csr(mp, addr);
    *value = (BYTE)mp->storage[addr];
@@ -93,12 +94,12 @@ int MEMPHY_read(struct memphy_struct *mp, addr_t addr, BYTE *value)
  */
 int MEMPHY_seq_write(struct memphy_struct *mp, addr_t addr, BYTE value)
 {
-
    if (mp == NULL)
       return -1;
 
-   if (!mp->rdmflg)
-      return -1; /* Not compatible mode for sequential read */
+   /* Sequential write is only valid on a non-random-access device. */
+   if (mp->rdmflg)
+      return -1;
 
    MEMPHY_mv_csr(mp, addr);
    mp->storage[addr] = value;
@@ -143,12 +144,16 @@ int MEMPHY_format(struct memphy_struct *mp, int pagesz)
    if (numfp <= 0)
       return -1;
 
-   /* Init head of free framephy list */
+   /* Init head of free framephy list. fp_next must be NULL initially so the
+    * list terminates correctly when numfp == 1 and the loop below does not
+    * run.
+    */
    fst = malloc(sizeof(struct framephy_struct));
    fst->fpn = iter;
+   fst->fp_next = NULL;
    mp->free_fp_list = fst;
 
-   /* We have list with first element, fill in the rest num-1 element member*/
+   /* Fill in the remaining numfp - 1 frames. */
    for (iter = 1; iter < numfp; iter++)
    {
       newfst = malloc(sizeof(struct framephy_struct));

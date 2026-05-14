@@ -61,9 +61,13 @@ struct pcb_t * load(const char * path) {
 	FILE * file;
 	if ((file = fopen(path, "r")) == NULL) {
 		printf("Cannot find process description at '%s'\n", path);
-		exit(1);		
+		exit(1);
 	}
-	snprintf(proc->path, 2*sizeof(path)+1, "%s", path);
+	/* sizeof(path) here is the pointer size (8 on 64-bit), not the
+	 * string length. Use sizeof(proc->path) so the actual destination
+	 * buffer determines the limit.
+	 */
+	snprintf(proc->path, sizeof(proc->path), "%s", path);
 	char opcode[32];
 	proc->code = (struct code_seg_t*)malloc(sizeof(struct code_seg_t));
 	fscanf(file, "%u %u", &proc->priority, &proc->code->size);
@@ -115,9 +119,11 @@ struct pcb_t * load(const char * path) {
 			break;
 		default:
 			printf("Opcode: %s\n", opcode);
+			fclose(file);
 			exit(1);
 		}
 	}
+	fclose(file);
 	return proc;
 }
 
