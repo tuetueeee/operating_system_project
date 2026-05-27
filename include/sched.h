@@ -26,6 +26,11 @@ void add_proc(struct pcb_t * proc);
 /* Remove a finished process from scheduler bookkeeping */
 void remove_proc(struct pcb_t * proc);
 
+/* Look up a live PCB by PID while holding the scheduler's queue lock so
+ * the caller can safely use it without racing add_proc/remove_proc.
+ * Returns NULL if no process with that PID is currently tracked. */
+struct pcb_t * sched_find_proc_by_pid(struct krnl_t *krnl, uint32_t pid);
+
 #endif
 
 

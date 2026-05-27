@@ -190,9 +190,9 @@ int MEMPHY_get_freefp(struct memphy_struct *mp, addr_t *retfpn)
 
 int MEMPHY_dump(struct memphy_struct *mp)
 {
-  /*TODO dump memphy contnt mp->storage
-   *     for tracing the memory content
-   */
+  /* Trace-friendly dump: walk the byte buffer and print only non-zero
+   * cells so a 2 MB RAM doesn't drown the log. Empty memories print a
+   * single "(empty/all zeros)" line for clarity. */
    if (mp == NULL || mp->storage == NULL) {
         return -1;
     }

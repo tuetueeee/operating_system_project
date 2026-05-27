@@ -1,0 +1,8 @@
+1 7
+alloc 100 0
+kmalloc 50 1
+write 65 0 0
+read 0 0 2
+write 99 1 0
+read 1 0 3
+free 0

@@ -116,26 +116,21 @@ static void * ld_routine(void * args) {
 	struct timer_id_t * timer_id = (struct timer_id_t*)args;
 #endif
 	int i = 0;
-  /* TODO init kernel page table directory */
+	/* Allocate kernel page-directory placeholders. The simulator's kernel
+	 * space is represented by the direct-mapped kmem_storage byte pool in
+	 * libmem.c (canonical kernel base KMEM_VBASE = 1ULL << 56), so these
+	 * arrays are present mainly so the krnl_t struct is consistent and
+	 * future code that wants a real kernel page table has a place to put
+	 * it. calloc zero-initialises every entry. */
 #ifdef MM64
-	os.krnl_pgd = malloc(PAGING64_MAX_PGN * sizeof(addr_t));
-	os.krnl_p4d = malloc(PAGING64_MAX_PGN * sizeof(addr_t));
-	os.krnl_pud = malloc(PAGING64_MAX_PGN * sizeof(addr_t));
-	os.krnl_pmd = malloc(PAGING64_MAX_PGN * sizeof(addr_t));
-	os.krnl_pt = malloc(PAGING64_MAX_PGN * sizeof(addr_t));
-
-	for (i = 0; i < PAGING64_MAX_PGN; i++)
-	{
-	   os.krnl_pgd[i] = (addr_t)&os.krnl_p4d;
-	   os.krnl_p4d[i] = (addr_t)&os.krnl_pud;
-	   os.krnl_pud[i] = (addr_t)&os.krnl_pmd;
-	   os.krnl_pmd[i] = (addr_t)&os.krnl_pt;
-	   os.krnl_pt[i] = 0;
-	}
+	os.krnl_pgd = calloc(PAGING64_DIR_ENTRIES, sizeof(addr_t));
+	os.krnl_p4d = NULL;
+	os.krnl_pud = NULL;
+	os.krnl_pmd = NULL;
+	os.krnl_pt  = NULL;
 #else
-	os.krnl_pgd = malloc(PAGING_MAX_PGN * sizeof(uint32_t));
+	os.krnl_pgd = calloc(PAGING_MAX_PGN, sizeof(uint32_t));
 #endif
-	i=0;
 	printf("ld_routine\n");
 	while (i < num_processes) {
 		struct pcb_t * proc = load(ld_processes.path[i]);
@@ -308,14 +303,15 @@ int main(int argc, char * argv[]) {
 	for (sit = 0; sit < PAGING_MAX_MMSWP; sit++)
 		finish_memphy(&mswp[sit]);
 	free(mm_ld_args);
-#ifdef MM64
+	/* free(NULL) is a no-op; only krnl_pgd is non-NULL under MM64
+	 * (the lower-level directories are lazy and currently unused for
+	 * kernel space — see ld_routine for context). */
 	free(os.krnl_pgd);
+#ifdef MM64
 	free(os.krnl_p4d);
 	free(os.krnl_pud);
 	free(os.krnl_pmd);
 	free(os.krnl_pt);
-#else
-	free(os.krnl_pgd);
 #endif
 #endif
 	free(cpu);

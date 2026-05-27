@@ -51,12 +51,20 @@ struct pgn_t{
 
 /*
  *  Memory region struct
+ *  Per Section 2.2.1 of the assignment, each region carries a privilege
+ *  classification used by the OS to enforce user/kernel separation:
+ *    VMRG_USER_MODE   - touchable by user-space READ/WRITE
+ *    VMRG_KERNEL_MODE - touchable only via kmem_* and as the kernel side
+ *                       of COPY_FROM_USER / COPY_TO_USER
  */
-struct vm_rg_struct {
-   int vmaid;
+#define VMRG_KERNEL_MODE 0
+#define VMRG_USER_MODE   1
 
+struct vm_rg_struct {
    addr_t rg_start;
    addr_t rg_end;
+
+   unsigned long mode_bit;   /* VMRG_USER_MODE or VMRG_KERNEL_MODE */
 
    struct vm_rg_struct *rg_next;
 };
@@ -105,6 +113,14 @@ struct mm_struct {
    addr_t *pud;
    addr_t *pmd;
    addr_t *pt;
+   /* Statistics for the demand-allocated 5-level page hierarchy. Required
+    * by the assignment (Section 3.2): "students must present statistics
+    * on the number of memory accesses and the size of multilevel paging
+    * storage". Counters are per-mm so they reflect a single process. */
+   uint64_t mm64_walk_count;        /* successful + failed walks */
+   uint64_t mm64_mem_access_count;  /* directory cells touched by walks */
+   uint64_t mm64_dir_alloc_count;   /* P4D/PUD/PMD/PT pages allocated */
+   uint64_t mm64_bytes_alloc;       /* total bytes in PGD + lazy dirs */
 #else
    uint32_t *pgd;
 #endif

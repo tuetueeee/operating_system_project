@@ -29,23 +29,24 @@ static pthread_mutex_t mmvm_lock = PTHREAD_MUTEX_INITIALIZER;
 /* Defined in the kernel-memory subsystem further below. */
 int kmem_addr_is_kernel(addr_t addr);
 
-/*enlist_vm_freerg_list - add new rg to freerg_list
- *@mm: memory region
- *@rg_elmt: new region
- *
+/*enlist_vm_freerg_list - add new rg to the free list of the owning VMA
+ *@mm: memory mapping
+ *@vmaid: VMA id that this region belongs to
+ *@rg_elmt: new region (already disconnected from any list)
  */
-int enlist_vm_freerg_list(struct mm_struct *mm, struct vm_rg_struct *rg_elmt)
+int enlist_vm_freerg_list(struct mm_struct *mm, int vmaid,
+                          struct vm_rg_struct *rg_elmt)
 {
-  struct vm_rg_struct *rg_node = mm->mmap->vm_freerg_list;
-
   if (rg_elmt->rg_start >= rg_elmt->rg_end)
     return -1;
 
-  if (rg_node != NULL)
-    rg_elmt->rg_next = rg_node;
+  struct vm_area_struct *vma = get_vma_by_num(mm, vmaid);
+  if (vma == NULL)
+    return -1;
 
-  /* Enlist the new region */
-  mm->mmap->vm_freerg_list = rg_elmt;
+  /* Push at head of this VMA's free list. */
+  rg_elmt->rg_next = vma->vm_freerg_list;
+  vma->vm_freerg_list = rg_elmt;
 
   return 0;
 }
@@ -87,6 +88,7 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, addr_t size, addr_t *allo
   {
     caller->mm->symrgtbl[rgid].rg_start = rgnode.rg_start;
     caller->mm->symrgtbl[rgid].rg_end = rgnode.rg_end;
+    caller->mm->symrgtbl[rgid].mode_bit = VMRG_USER_MODE;
 
     *alloc_addr = rgnode.rg_start;
 
@@ -112,6 +114,7 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, addr_t size, addr_t *allo
 
   caller->mm->symrgtbl[rgid].rg_start = old_sbrk;
   caller->mm->symrgtbl[rgid].rg_end = old_sbrk + size;
+  caller->mm->symrgtbl[rgid].mode_bit = VMRG_USER_MODE;
 
   *alloc_addr = old_sbrk;
 
@@ -136,7 +139,10 @@ int __free(struct pcb_t *caller, int vmaid, int rgid)
     return -1;
   }
 
-  /* TODO: Manage the collect freed region to freerg_list */
+  /* Reclaim the region: clear the symbol-table slot and (for user-space
+   * regions) enlist its range back into the owning VMA's free list so a
+   * later alloc on this PCB can reuse the space. Kernel-pool regions
+   * take a different path below — see comment near kmem_addr_is_kernel. */
   struct vm_rg_struct *rgnode = get_symrg_byid(caller->mm, rgid);
 
   if (rgnode->rg_start == 0 && rgnode->rg_end == 0)
@@ -152,6 +158,7 @@ int __free(struct pcb_t *caller, int vmaid, int rgid)
   if (kmem_addr_is_kernel(rgnode->rg_start))
   {
     rgnode->rg_start = rgnode->rg_end = 0;
+    rgnode->mode_bit = VMRG_KERNEL_MODE;
     rgnode->rg_next = NULL;
     pthread_mutex_unlock(&mmvm_lock);
     return 0;
@@ -160,13 +167,15 @@ int __free(struct pcb_t *caller, int vmaid, int rgid)
   struct vm_rg_struct *freerg_node = malloc(sizeof(struct vm_rg_struct));
   freerg_node->rg_start = rgnode->rg_start;
   freerg_node->rg_end = rgnode->rg_end;
+  freerg_node->mode_bit = VMRG_USER_MODE;   /* free list belongs to user-space */
   freerg_node->rg_next = NULL;
 
   rgnode->rg_start = rgnode->rg_end = 0;
+  rgnode->mode_bit = VMRG_KERNEL_MODE;      /* zero state */
   rgnode->rg_next = NULL;
 
-  /*enlist the obsoleted memory region */
-  enlist_vm_freerg_list(caller->mm, freerg_node);
+  /*enlist the obsoleted memory region into the owning VMA's free list */
+  enlist_vm_freerg_list(caller->mm, vmaid, freerg_node);
 
   pthread_mutex_unlock(&mmvm_lock);
   return 0;
@@ -360,6 +369,12 @@ int pg_setval(struct mm_struct *mm, addr_t addr, BYTE value, struct pcb_t *calle
  * holding mmvm_lock. On success returns 0 with mmvm_lock still held —
  * the caller must release it after the page-level op. On any validation
  * failure returns -1 with the lock released.
+ *
+ * Enforces the dual-mode boundary required by the assignment (Section
+ * 1.3: "READ/WRITE userspace only ... prevents the supervisor mode
+ * access to kernelspace address"): a region marked VMRG_KERNEL_MODE
+ * cannot be touched via the user-space read/write path. Cross-boundary
+ * access must use copy_from_user / copy_to_user instead.
  */
 static int __resolve_rg_addr(struct pcb_t *caller, int rgid, addr_t offset,
                              addr_t *out)
@@ -371,6 +386,12 @@ static int __resolve_rg_addr(struct pcb_t *caller, int rgid, addr_t offset,
       currg->rg_start == currg->rg_end ||
       offset >= currg->rg_end - currg->rg_start)
   {
+    pthread_mutex_unlock(&mmvm_lock);
+    return -1;
+  }
+  if (currg->mode_bit != VMRG_USER_MODE)
+  {
+    /* User-space READ/WRITE attempting to touch a kernel region — refuse. */
     pthread_mutex_unlock(&mmvm_lock);
     return -1;
   }
@@ -413,11 +434,19 @@ int libread(
   if (val == 0)
     *destination = (uint32_t)data;
 #ifdef IODUMP
-  printf("PID=%u read region=%u offset=%lu value=%u\n",
-         proc->pid, source, (unsigned long)offset, (unsigned)data);
+  if (val == 0) {
+    printf("PID=%u read region=%u offset=%lu value=%u\n",
+           proc->pid, source, (unsigned long)offset, (unsigned)data);
 #ifdef PAGETBL_DUMP
-  print_pgtbl(proc, 0, -1);
+    print_pgtbl(proc, 0, -1);
 #endif
+  } else {
+    /* Failed read (e.g. invalid region, out-of-range offset, or a
+     * privilege-bit violation against a kernel region). Print the
+     * refusal explicitly so the trace doesn't leak uninitialised data. */
+    printf("PID=%u read region=%u offset=%lu DENIED\n",
+           proc->pid, source, (unsigned long)offset);
+  }
 #endif
 
   return val;
@@ -453,16 +482,18 @@ int libwrite(
     addr_t offset)
 {
   int val = __write(proc, 0, destination, offset, data);
-  if (val == -1)
-    return -1;
 #ifdef IODUMP
-  printf("PID=%u write region=%u offset=%lu value=%u\n",
-         proc->pid, destination, (unsigned long)offset, (unsigned)data);
+  if (val == 0) {
+    printf("PID=%u write region=%u offset=%lu value=%u\n",
+           proc->pid, destination, (unsigned long)offset, (unsigned)data);
 #ifdef PAGETBL_DUMP
-  print_pgtbl(proc, 0, -1);
+    print_pgtbl(proc, 0, -1);
 #endif
+  } else {
+    printf("PID=%u write region=%u offset=%lu value=%u DENIED\n",
+           proc->pid, destination, (unsigned long)offset, (unsigned)data);
+  }
 #endif
-
   return val;
 }
 
@@ -539,6 +570,7 @@ int libkmem_malloc(struct pcb_t *caller, uint32_t size, uint32_t reg_index)
 
   caller->mm->symrgtbl[reg_index].rg_start = addr;
   caller->mm->symrgtbl[reg_index].rg_end   = addr + size;
+  caller->mm->symrgtbl[reg_index].mode_bit = VMRG_KERNEL_MODE;
   caller->mm->symrgtbl[reg_index].rg_next  = NULL;
 
 #ifdef IODUMP
@@ -612,6 +644,7 @@ int libkmem_cache_alloc(struct pcb_t *caller, uint32_t reg_index, uint32_t cache
 
   caller->mm->symrgtbl[reg_index].rg_start = slot_addr;
   caller->mm->symrgtbl[reg_index].rg_end   = slot_addr + (addr_t)slot_size;
+  caller->mm->symrgtbl[reg_index].mode_bit = VMRG_KERNEL_MODE;
   caller->mm->symrgtbl[reg_index].rg_next  = NULL;
 
 #ifdef IODUMP
@@ -679,7 +712,14 @@ int libkmem_copy_from_user(struct pcb_t *caller, uint32_t source,
   if (src == NULL || dst == NULL ||
       src->rg_start == src->rg_end || dst->rg_start == dst->rg_end)
     return -1;
+  /* copy_from_user moves bytes USER -> KERNEL. Enforce both the address-
+   * range invariant (dst lives in the kernel pool) AND the privilege bit
+   * (src tagged as user-mode, dst tagged as kernel-mode) so a tampered
+   * user-region descriptor that happens to point into the kernel range
+   * still gets rejected, and vice versa. */
   if (!kmem_addr_is_kernel(dst->rg_start))
+    return -1;
+  if (src->mode_bit != VMRG_USER_MODE || dst->mode_bit != VMRG_KERNEL_MODE)
     return -1;
 
   pthread_mutex_lock(&mmvm_lock);
@@ -721,7 +761,11 @@ int libkmem_copy_to_user(struct pcb_t *caller, uint32_t source,
   if (src == NULL || dst == NULL ||
       src->rg_start == src->rg_end || dst->rg_start == dst->rg_end)
     return -1;
+  /* copy_to_user moves bytes KERNEL -> USER. Same dual check as
+   * copy_from_user but with the roles reversed. */
   if (!kmem_addr_is_kernel(src->rg_start))
+    return -1;
+  if (src->mode_bit != VMRG_KERNEL_MODE || dst->mode_bit != VMRG_USER_MODE)
     return -1;
 
   pthread_mutex_lock(&mmvm_lock);
@@ -755,18 +799,18 @@ int free_pcb_memph(struct pcb_t *caller)
   pthread_mutex_lock(&mmvm_lock);
   int pagenum, fpn;
   uint32_t pte;
-  int max_pgn;
-
-#ifdef MM64
-  max_pgn = PAGING64_MAX_PGN;
-#else
-  max_pgn = PAGING_MAX_PGN;
-#endif
+  /* Iterate up to the simulator-wide page count (PAGING_PAGESZ-based),
+   * so any frame that mm64's 5-level walk could legitimately map is
+   * released here. The MM64-only PAGING64_MAX_PGN constant assumes 4KB
+   * pages and would skip valid pages with pgn >= 512. */
+  int max_pgn = PAGING_MAX_PGN;
 
   for (pagenum = 0; pagenum < max_pgn; pagenum++)
   {
 #ifdef MM64
-    pte = (uint32_t)caller->mm->pt[pagenum];
+    /* Walk the 5-level hierarchy. Unmapped ranges short-circuit to 0 inside
+     * pte_get_entry without instantiating any directory. */
+    pte = pte_get_entry(caller, pagenum);
 #else
     pte = caller->mm->pgd[pagenum];
 #endif
@@ -827,11 +871,22 @@ void free_pcb(struct pcb_t *proc)
     }
 
 #ifdef MM64
-    free(proc->mm->pgd);
-    free(proc->mm->p4d);
-    free(proc->mm->pud);
-    free(proc->mm->pmd);
-    free(proc->mm->pt);
+    /* Final per-process report for the 5-level hierarchy, as required by
+     * the assignment (Section 3.2): walks performed, directory cells
+     * touched, directory pages allocated, and total bytes of paging
+     * storage. The report can quote these directly. */
+    printf("[mm64-stats] PID=%u walks=%llu mem_accesses=%llu dir_pages=%llu bytes=%llu\n",
+           proc->pid,
+           (unsigned long long)proc->mm->mm64_walk_count,
+           (unsigned long long)proc->mm->mm64_mem_access_count,
+           (unsigned long long)proc->mm->mm64_dir_alloc_count,
+           (unsigned long long)proc->mm->mm64_bytes_alloc);
+    /* Walk the demand-allocated PGD->P4D->PUD->PMD->PT tree and free
+     * exactly the directories that were instantiated. The legacy p4d/pud/
+     * pmd/pt fields on mm_struct are unused under the real 5-level layout
+     * (always NULL since init_mm); the live tree is reached through PGD
+     * entries. */
+    mm64_destroy_pgd_tree(proc->mm);
 #else
     free(proc->mm->pgd);
 #endif
@@ -858,7 +913,9 @@ int find_victim_page(struct mm_struct *mm, addr_t *retpgn)
 {
   struct pgn_t *pg = mm->fifo_pgn;
 
-  /* TODO: Implement the theorical mechanism to find the victim page */
+  /* FIFO page-replacement policy: enlist_pgn_node pushes newly-online
+   * pages at the head of the list, so the tail is the oldest page —
+   * exactly the victim we want. Walk to the tail, unlink, return. */
   if (!pg)
   {
     return -1;

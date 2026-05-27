@@ -13,6 +13,11 @@
 #define PAGING64_MAX_PGN  (DIV_ROUND_UP(BIT_ULL(21),PAGING64_PAGESZ))
 #define PAGING64_PAGE_ALIGNSZ(sz) (DIV_ROUND_UP(sz,PAGING64_PAGESZ)*PAGING64_PAGESZ)
 
+/* Each directory slice is 9 bits wide (bits hi..lo span 9). One non-leaf
+ * directory holds 2^9 = 512 entries; one leaf PT holds 512 PTEs. */
+#define PAGING64_DIR_BITS    9
+#define PAGING64_DIR_ENTRIES (1u << PAGING64_DIR_BITS)
+
 
 /* OFFSET */
 #define PAGING64_ADDR_OFFST_HIBIT 11
@@ -62,5 +67,10 @@
 #define PAGING64_ADDR_PGD_MASK  GENMASK64(PAGING64_ADDR_PGD_HIBIT,PAGING64_ADDR_PGD_LOBIT)
 
 
+struct mm_struct;
+/* Recursively free every directory page that was demand-allocated underneath
+ * mm->pgd. Safe to call when mm->pgd is NULL or when only some sub-levels
+ * have been populated. */
+void mm64_destroy_pgd_tree(struct mm_struct *mm);
 
 #endif

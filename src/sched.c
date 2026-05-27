@@ -228,6 +228,29 @@ void remove_proc(struct pcb_t * proc) {
 	pthread_mutex_unlock(&queue_lock);
 }
 
+struct pcb_t * sched_find_proc_by_pid(struct krnl_t *krnl, uint32_t pid) {
+	if (krnl == NULL)
+		return NULL;
+	/* Use the per-krnl running_list pointer (set by add_proc) rather
+	 * than the file-scope `running_list` directly, so this helper would
+	 * still work if multiple kernel instances ever shared this scheduler
+	 * file. */
+	struct queue_t *list = krnl->running_list;
+	if (list == NULL)
+		return NULL;
+
+	struct pcb_t *match = NULL;
+	pthread_mutex_lock(&queue_lock);
+	for (int i = 0; i < list->size; i++) {
+		if (list->proc[i] != NULL && list->proc[i]->pid == pid) {
+			match = list->proc[i];
+			break;
+		}
+	}
+	pthread_mutex_unlock(&queue_lock);
+	return match;
+}
+
 void finish_scheduler(void) {
 	pthread_mutex_destroy(&queue_lock);
 }
